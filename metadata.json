@@ -1,0 +1,6 @@
+{
+  "name": "برنامج المحاسبة للمحلات الصغيرة",
+  "description": "برنامج محاسبة وتسيير محلات متكامل يشمل شجرة الحسابات، المبيعات، المشتريات، إدارة الأصناف، الموردين والزبائن والتقارير المالية.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

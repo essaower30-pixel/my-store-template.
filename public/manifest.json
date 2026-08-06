@@ -1,0 +1,26 @@
+{
+  "short_name": "التاجر الذكي (بقالة)",
+  "name": "التاجر الذكي - إدارة البقالة والسوبرماركت",
+  "icons": [
+    {
+      "src": "/icon.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.jpg",
+      "type": "image/jpeg",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#059669",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl"
+}
