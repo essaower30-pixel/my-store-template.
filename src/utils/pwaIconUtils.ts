@@ -12,22 +12,28 @@ export interface PresetIcon {
 
 export const PRESET_ICONS: PresetIcon[] = [
   {
-    id: 'grocery_3d',
-    name: 'أيقونة البقالة والسوبرماركت (3D)',
+    id: 'grocery_3d_new',
+    name: 'أيقونة التاجر الذكي (3D جديدة)',
     url: '/icon.jpg',
-    description: 'أيقونة ملونة حديثة بسلة تبضع خضروات ومواد غذائية'
+    description: 'أيقونة ملونة فاخرة مع سلة تسوق ومواد غذائية طازجة باللون الأخضر'
+  },
+  {
+    id: 'app_shop_icon',
+    name: 'أيقونة السوبرماركت الحديث',
+    url: '/app_shop_icon.jpg',
+    description: 'تصميم رائع لواجهة محل تجاري وسوبرماركت عصري'
+  },
+  {
+    id: 'grocery_app_classic',
+    name: 'أيقونة البقالة الكلاسيكية',
+    url: '/grocery_app_icon.jpg',
+    description: 'أيقونة متجر تقليدي أنيق للمواد الغذائية'
   },
   {
     id: 'smart_merchant_bag',
-    name: 'أيقونة التاجر الذكي الأنيقة',
+    name: 'حقيبة التسوق الأنيقة',
     url: 'https://images.unsplash.com/photo-1556740758-90de374c12ad?w=500&auto=format&fit=crop&q=80',
     description: 'حقيبة تسوق عصرية مع فاتورة ودفع إلكتروني'
-  },
-  {
-    id: 'cashier_pos',
-    name: 'أيقونة الكاشير والمتجر الذهبية',
-    url: 'https://images.unsplash.com/photo-1556742049-0a6708957724?w=500&auto=format&fit=crop&q=80',
-    description: 'جهاز كاشير مع بطاقة سداد وتجارة ذكية'
   }
 ];
 
@@ -104,7 +110,14 @@ export function updatePWAConfig(iconUrl: string, title: string): void {
     if (match) {
       version = match[1];
     }
-    const manifestUrl = `/api/manifest.json?title=${encodeURIComponent(title)}&icon=${encodeURIComponent(iconUrl)}&v=${version}`;
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const storeVal = urlParams ? urlParams.get('store') : null;
+    let manifestUrl = `/api/manifest.json?title=${encodeURIComponent(title)}&icon=${encodeURIComponent(iconUrl)}&v=${version}`;
+    if (storeVal) {
+      manifestUrl += `&store=${encodeURIComponent(storeVal)}`;
+    } else if (typeof window !== 'undefined' && window.location.pathname.startsWith('/store')) {
+      manifestUrl += '&store=true';
+    }
 
     let manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (!manifestLink) {

@@ -26,6 +26,7 @@ export interface JournalEntry {
   lines: JournalLine[];
   referenceType?: 'sales' | 'purchase' | 'receipt' | 'payment' | 'manual';
   referenceId?: string;
+  referenceNumber?: string;
   createdAt: string;
 }
 
@@ -48,6 +49,14 @@ export interface Product {
   minStockAlert: number; // حد الإنذار بالأنخفاض
   location?: string;
   image?: string; // صورة المنتج (Base64 data URL أو رابط)
+  showInStore?: boolean; // هل يتم عرضه في تطبيق الزبون (المتجر الإلكتروني)؟
+  originalPrice?: number; // السعر السابق قبل الخصم (للعروض والتخفيضات)
+  isOffer?: boolean; // هل المنتج يندرج تحت قائمة العروض الخاصة؟
+  hasSubUnits?: boolean; // تفعيل التعبئة (كرتون/كيس شد كذا)
+  subUnitsPerUnit?: number; // العدد داخل الكرتونة/الكيس
+  subUnitName?: string; // اسم الوحدة الفرعية (مثال: حبة)
+  subUnitSellingPrice?: number; // سعر بيع الوحدة الفرعية (تلقائي أو مخصص)
+  storeId?: string; // معرف المتجر الشريك التابع له المنتج (فارغ أو 'main' للمتجر الرئيسي)
 }
 
 export interface Supplier {
@@ -88,6 +97,7 @@ export interface InvoiceItem {
   unitPrice: number; // For sale: selling price, For purchase: cost price
   discount: number;
   total: number;
+  isSubUnit?: boolean; // هل تم البيع بالحبة/الوحدة الفرعية بدلاً من الكرتون؟
 }
 
 export interface SalesInvoice {
@@ -142,6 +152,16 @@ export interface PaymentVoucher {
   notes: string;
 }
 
+export interface PartnerStore {
+  id: string;
+  name: string;
+  phone: string; // رقم تلفون المتجر الشريك
+  shamCashNumber?: string; // الرقم المالي لشام كاش الخاص بالمتجر الشريك
+  shamCashQR?: string; // باركود حساب شام كاش للمتجر الشريك (صورة)
+  logo?: string; // صورة أو شعار المتجر
+  link?: string; // رابط المتجر الإلكتروني الخارجي (اختياري)
+}
+
 export interface ShopSettings {
   shopName: string;
   activityType: string;
@@ -154,6 +174,14 @@ export interface ShopSettings {
   receiptHeader: string;
   receiptFooter: string;
   appUrl?: string;
+  enableAutoScroll?: boolean;
+  deliveryFee?: number; // قيمة رسوم التوصيل الافتراضية
+  promoVideo?: string; // فيديو ترويجي أو فيديو عروض (Base64 أو رابط)
+  partnerStores?: PartnerStore[]; // المتاجر الأخرى الشريكة لعرض منتجاتها
+  enableShamCash?: boolean; // تفعيل الدفع عبر شام كاش
+  shamCashNumber?: string; // الرقم المالي لحساب شام كاش الخاص بالمتجر
+  shamCashQR?: string; // كود الـ QR الخاص بحساب شام كاش (صورة)
+  multiStores?: { id: string; name: string }[]; // إدارة الروابط وتعدد المتاجر (الفروع المستقلة)
 }
 
 export interface StockAdjustment {
@@ -203,5 +231,44 @@ export interface User {
   };
   createdAt: string;
 }
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  date: string;
+  time: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress?: string;
+  deliveryMethod: 'delivery' | 'pickup'; // توصيل | استلام من المتجر
+  items: InvoiceItem[];
+  subtotal: number;
+  taxAmount: number;
+  deliveryFee?: number; // قيمة رسوم التوصيل
+  netTotal: number;
+  status: 'pending' | 'accepted' | 'completed' | 'rejected';
+  notes?: string;
+  paymentMethod?: 'cash' | 'sham_cash'; // طريقة الدفع: كاش أو شام كاش
+  paymentReceiptNumber?: string; // رقم إشعار/عملية الدفع في شام كاش
+  paymentReceiptImage?: string; // صورة إشعار الدفع المرفوعة من العميل
+  storeId?: string; // معرف المتجر الشريك التابع له الطلب
+}
+
+export interface FiscalYearArchive {
+  id: string;
+  year: number;
+  closedAt: string;
+  data: {
+    salesInvoices: any[];
+    purchaseInvoices: any[];
+    vouchers: any[];
+    journalEntries: any[];
+    stockAdjustments: any[];
+    products: any[];
+    customers: any[];
+    suppliers: any[];
+  };
+}
+
 
 

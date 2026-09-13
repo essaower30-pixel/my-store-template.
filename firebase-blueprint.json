@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "Store database and multi-device synchronisation partition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "required": ["id"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "role"]
+    }
+  },
+  "firestore": {
+    "stores/{storeId}": {
+      "entity": "Store",
+      "description": "Stores state documents containing products, sales, inventory and settings"
+    },
+    "users/{userId}": {
+      "entity": "User",
+      "description": "Users collection for authentication and roles"
+    }
+  }
+}

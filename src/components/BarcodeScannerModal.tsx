@@ -49,6 +49,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const containerId = 'interactive-barcode-scanner-box';
 
   const isMountedRef = useRef(true);
+  const refocusIntervalRef = useRef<any>(null);
 
   const handleClose = async () => {
     if (isClosing) return;
@@ -85,47 +86,9 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     setIsTorchOn(false);
 
     if (activeTab === 'camera') {
-      Html5Qrcode.getCameras()
-        .then((devices) => {
-          if (!isMountedRef.current) return;
-          if (devices && devices.length > 0) {
-            setCameras(devices);
-            // Prioritize "camera 0" with a robust word-boundary search, then other back/rear camera labels, and fallback to first device
-            const backCam = devices.find(d => {
-              const lbl = (d.label || '').toLowerCase();
-              return /camera\s*0\b/.test(lbl) || /\b0\b/.test(lbl) || /\b٠\b/.test(lbl);
-            }) || devices.find(d => {
-              const lbl = (d.label || '').toLowerCase();
-              return lbl.includes('back') || 
-                     lbl.includes('rear') || 
-                     lbl.includes('environment') ||
-                     lbl.includes('خلفية');
-            }) || devices[0];
-            const bestCamId = backCam ? backCam.id : 'environment';
-            setSelectedCameraId(bestCamId);
-            startScanner(bestCamId);
-          } else {
-            setSelectedCameraId('environment');
-            startScanner('environment');
-          }
-        })
-        .catch((err) => {
-          console.warn('Could not enumerate cameras, checking if permission denied:', err);
-          const errStr = String(err).toLowerCase();
-          const isPermission = 
-            errStr.includes('notallowederror') || 
-            errStr.includes('permission') || 
-            errStr.includes('denied') || 
-            (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'NotReadableError'));
-
-          if (isPermission) {
-            setIsPermissionDenied(true);
-            setError('NotAllowedError: Permission denied');
-          } else {
-            setSelectedCameraId('environment');
-            startScanner('environment');
-          }
-        });
+      // Start the scanner immediately using 'environment' to trigger the permission prompt instantly with zero delay!
+      setSelectedCameraId('environment');
+      startScanner('environment');
     } else {
       stopScanner();
     }
@@ -147,9 +110,16 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       setUsingNativeDetector(hasNativeBarcodeDetector);
 
       // Standard Html5Qrcode initialization
-      const containerEl = document.getElementById(containerId);
+      let containerEl = document.getElementById(containerId);
+      let attempts = 0;
+      while (!containerEl && attempts < 15) {
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 50));
+        containerEl = document.getElementById(containerId);
+      }
+
       if (!containerEl) {
-        console.warn(`Container element #${containerId} not present in DOM yet.`);
+        console.warn(`Container element #${containerId} not present in DOM after 15 attempts.`);
         return;
       }
 
@@ -168,11 +138,24 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       });
       scannerRef.current = html5Qrcode;
 
-      const targetCam = cameraIdToUse || selectedCameraId || 'environment';
+      let targetCam = cameraIdToUse || selectedCameraId || 'environment';
       
-      const cameraConfig = targetCam === 'environment'
-        ? { facingMode: 'environment' }
-        : targetCam;
+      // Map "environment" to the first camera (index 0) if we have enumerated cameras, to bypass incorrect system mapping
+      if (targetCam === 'environment' && cameras.length > 0) {
+        targetCam = cameras[0].id;
+      }
+      
+      // High-performance camera resolution configurations (1280x720 ideal HD only for default environment)
+      const cameraConfig: any = targetCam === 'environment'
+        ? {
+            facingMode: 'environment',
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            aspectRatio: { ideal: 1.7777777778 }
+          }
+        : {
+            deviceId: targetCam
+          };
 
       const config: any = {
         fps: 30, // High FPS for real-time, ultra-fast and responsive scanning
@@ -188,7 +171,20 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         },
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true
-        }
+        },
+        // Request focusMode directly in videoConstraints, matching targetCam perfectly
+        videoConstraints: targetCam === 'environment'
+          ? {
+              facingMode: 'environment',
+              width: { ideal: 1280, min: 640 },
+              height: { ideal: 720, min: 480 },
+              aspectRatio: { ideal: 1.7777777778 },
+              focusMode: 'continuous'
+            }
+          : {
+              deviceId: targetCam,
+              focusMode: 'continuous'
+            }
       };
 
       try {
@@ -211,15 +207,28 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           return;
         }
         setIsScanning(true);
-        applyTorchAuto(html5Qrcode);
+        applyTorchAndFocusOptimizations(html5Qrcode);
 
-        // Re-query cameras now that permission is granted to get real, populated labels
-        Html5Qrcode.getCameras().then((devices) => {
+        // Re-query cameras natively now that permission is granted to get real, populated labels
+        navigator.mediaDevices.enumerateDevices().then((allDevices) => {
           if (!isMountedRef.current) return;
+          const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
+          const devices = videoInputs.map((d, idx) => ({
+            id: d.deviceId || String(idx),
+            label: d.label || `كاميرا رقم ${idx}`
+          }));
+          
           if (devices && devices.length > 0) {
             setCameras(devices);
+            
+            // If started with generic 'environment', auto-switch to physical camera 0 (the primary rear camera)
+            if (targetCam === 'environment') {
+              const physicalRearCamId = devices[0].id;
+              setSelectedCameraId(physicalRearCamId);
+              startScanner(physicalRearCamId);
+            }
           }
-        }).catch((err) => console.warn('Could not re-query cameras on start success:', err));
+        }).catch((err) => console.warn('Could not re-query cameras natively on start success:', err));
       } catch (err1) {
         console.warn('First camera initialization attempt failed. Retrying fallback 1 (Standard environment)...', err1);
         if (!isMountedRef.current) return;
@@ -257,7 +266,20 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             return;
           }
           setIsScanning(true);
-          applyTorchAuto(html5Qrcode);
+          applyTorchAndFocusOptimizations(html5Qrcode);
+
+          // Re-query cameras natively now that permission is granted to get real, populated labels
+          navigator.mediaDevices.enumerateDevices().then((allDevices) => {
+            if (!isMountedRef.current) return;
+            const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
+            const devices = videoInputs.map((d, idx) => ({
+              id: d.deviceId || String(idx),
+              label: d.label || `كاميرا رقم ${idx}`
+            }));
+            if (devices && devices.length > 0) {
+              setCameras(devices);
+            }
+          }).catch((err) => console.warn(err));
         } catch (err2) {
           console.warn('Fallback 1 failed. Retrying fallback 2 (Any video source / user camera)...', err2);
           if (!isMountedRef.current) return;
@@ -295,9 +317,22 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
               return;
             }
             setIsScanning(true);
-            applyTorchAuto(html5Qrcode);
+            applyTorchAndFocusOptimizations(html5Qrcode);
+
+            // Re-query cameras natively now that permission is granted to get real, populated labels
+            navigator.mediaDevices.enumerateDevices().then((allDevices) => {
+              if (!isMountedRef.current) return;
+              const videoInputs = allDevices.filter(d => d.kind === 'videoinput');
+              const devices = videoInputs.map((d, idx) => ({
+                id: d.deviceId || String(idx),
+                label: d.label || `كاميرا رقم ${idx}`
+              }));
+              if (devices && devices.length > 0) {
+                setCameras(devices);
+              }
+            }).catch((err) => console.warn(err));
           } catch (err3) {
-            console.error('All live camera initialization attempts failed.', err3);
+            console.warn('All live camera initialization attempts failed.', err3);
             throw err3;
           }
         }
@@ -321,15 +356,15 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     }
   };
 
-  const applyTorchAuto = async (html5Qrcode: Html5Qrcode) => {
+  const applyTorchAndFocusOptimizations = async (html5Qrcode: Html5Qrcode) => {
     try {
       // Small delay to allow camera stream to stabilize and capabilities to populate
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 600));
       if (!isMountedRef.current || !html5Qrcode.isScanning) return;
       
-      let enabled = false;
+      let enabledTorch = false;
 
-      // Approach 1: HTML5Qrcode built-in capabilities
+      // 1. Try to auto-enable Flash/Torch if capability is present (great for high contrast barcode scanning)
       try {
         const capabilities = html5Qrcode.getRunningTrackCapabilities();
         const hasTorchCap = !!(capabilities && (capabilities as any).torch);
@@ -339,36 +374,125 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           });
           setIsTorchOn(true);
           setHasTorch(true);
-          enabled = true;
-          console.log('Flash auto-enabled successfully via HTML5Qrcode.');
+          enabledTorch = true;
+          console.log('Flash/Torch auto-enabled successfully via HTML5Qrcode.');
         }
       } catch (err) {
         console.warn('HTML5Qrcode built-in torch auto-enable failed:', err);
       }
 
-      // Approach 2: Direct Video Track Fallback (extremely reliable on mobile Safari/Chrome)
-      if (!enabled) {
+      // Approach 2: Direct Video Track Fallback for torch
+      if (!enabledTorch) {
         try {
           const videoElement = document.querySelector(`#${containerId} video`) as HTMLVideoElement | null;
           if (videoElement && videoElement.srcObject) {
             const stream = videoElement.srcObject as MediaStream;
             const track = stream.getVideoTracks()[0];
             if (track) {
-              await track.applyConstraints({
-                advanced: [{ torch: true } as any]
-              });
-              setIsTorchOn(true);
-              setHasTorch(true);
-              enabled = true;
-              console.log('Flash auto-enabled successfully via direct video track.');
+              const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+              if ((capabilities as any).torch) {
+                await track.applyConstraints({
+                  advanced: [{ torch: true } as any]
+                });
+                setIsTorchOn(true);
+                setHasTorch(true);
+                enabledTorch = true;
+                console.log('Flash/Torch auto-enabled successfully via direct video track.');
+              }
             }
           }
         } catch (fallbackErr) {
           console.warn('Direct video track torch auto-enable failed:', fallbackErr);
         }
       }
-    } catch (torchErr) {
-      console.warn('Auto-enabling torch/flash failed entirely:', torchErr);
+
+      // 2. Continuous Focus optimization
+      try {
+        const videoElement = document.querySelector(`#${containerId} video`) as HTMLVideoElement | null;
+        if (videoElement && videoElement.srcObject) {
+          const stream = videoElement.srcObject as MediaStream;
+          const track = stream.getVideoTracks()[0];
+          if (track) {
+            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            console.log('Camera track capabilities:', capabilities);
+            
+            const advancedConstraints: any = {};
+            let canAutofocus = false;
+
+            if ((capabilities as any).focusMode) {
+              const modes = (capabilities as any).focusMode;
+              if (modes.includes('continuous')) {
+                advancedConstraints.focusMode = 'continuous';
+                canAutofocus = true;
+                console.log('Focus Mode: "continuous" supported by device camera.');
+              } else if (modes.includes('auto')) {
+                advancedConstraints.focusMode = 'auto';
+                canAutofocus = true;
+                console.log('Focus Mode: "auto" supported by device camera.');
+              }
+            }
+
+            if ((capabilities as any).exposureMode && (capabilities as any).exposureMode.includes('continuous')) {
+              advancedConstraints.exposureMode = 'continuous';
+            }
+
+            if ((capabilities as any).whiteBalanceMode && (capabilities as any).whiteBalanceMode.includes('continuous')) {
+              advancedConstraints.whiteBalanceMode = 'continuous';
+            }
+
+            // Keep torch enabled on subsequent constraint calls
+            if (enabledTorch || isTorchOn) {
+              advancedConstraints.torch = true;
+            }
+
+            if (Object.keys(advancedConstraints).length > 0) {
+              await track.applyConstraints({
+                advanced: [advancedConstraints]
+              });
+              console.log('Track capabilities configured successfully:', advancedConstraints);
+            }
+
+            // 3. Proactive Auto-Refocus Loop
+            // Cheap phone lens drivers can lock focus or miss focus for tiny barcodes.
+            // Programmatically cycle focus mode between 'single-shot' and 'continuous' 
+            // every 2.5 seconds to force a lens adjustment cycle.
+            if (canAutofocus) {
+              const refocusInterval = setInterval(async () => {
+                if (!isMountedRef.current || !html5Qrcode.isScanning) {
+                  clearInterval(refocusInterval);
+                  return;
+                }
+                try {
+                  const currentCapabilities = track.getCapabilities ? track.getCapabilities() : {};
+                  const modes = (currentCapabilities as any).focusMode || [];
+                  
+                  if (modes.includes('continuous')) {
+                    await track.applyConstraints({
+                      advanced: [{ focusMode: 'single-shot' } as any]
+                    });
+                    await new Promise(r => setTimeout(r, 120));
+                    await track.applyConstraints({
+                      advanced: [{ focusMode: 'continuous', torch: isTorchOn || enabledTorch } as any]
+                    });
+                    console.log('Refocused camera lens successfully.');
+                  }
+                } catch (refocusErr) {
+                  // Ignore quiet refocus errors
+                }
+              }, 2500);
+
+              if (refocusIntervalRef.current) {
+                clearInterval(refocusIntervalRef.current);
+              }
+              refocusIntervalRef.current = refocusInterval;
+            }
+          }
+        }
+      } catch (focusErr) {
+        console.warn('Advanced camera track optimizations failed to apply:', focusErr);
+      }
+    } catch (err) {
+      console.warn('Apply camera optimizations warning:', err);
     }
   };
 
@@ -404,7 +528,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             await scannerRef.current.stop();
           }
         } catch (e) {
-          console.error('Failed to stop barcode scanner gracefully', e);
+          console.warn('Failed to stop barcode scanner gracefully', e);
         }
         scannerRef.current = null;
       }
@@ -441,6 +565,11 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         });
       } catch (err) {
         console.warn('Safety stop tracks failed:', err);
+      }
+
+      if (refocusIntervalRef.current) {
+        clearInterval(refocusIntervalRef.current);
+        refocusIntervalRef.current = null;
       }
 
       setIsScanning(false);
@@ -568,12 +697,17 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   };
 
   const handleToggleCameraNext = async () => {
-    if (cameras.length > 1) {
-      const currentIdx = cameras.findIndex(c => c.id === selectedCameraId);
-      const nextIdx = (currentIdx + 1) % cameras.length;
-      const nextId = cameras[nextIdx].id;
+    const validCameras = (cameras || []).filter(c => c && c.id);
+    if (validCameras.length > 1) {
+      const currentIdx = validCameras.findIndex(c => c.id === selectedCameraId);
+      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % validCameras.length : 0;
+      const nextId = validCameras[nextIdx].id;
       setSelectedCameraId(nextId);
       await startScanner(nextId);
+    } else if (validCameras.length > 0) {
+      const firstId = validCameras[0].id;
+      setSelectedCameraId(firstId);
+      await startScanner(firstId);
     } else {
       await startScanner();
     }
@@ -635,7 +769,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         setError('لم يتم العثور على باركود واضح في الصورة. يرجى التكبير والالتقاط بوضوح.');
       }
     } catch (err: any) {
-      console.error('File scan error:', err);
+      console.warn('File scan error:', err);
       setError('لم يستطع النظام قراءة الباركود من الصورة. يرجى التأكد من الوضوح أو الإدخال اليدوي.');
     } finally {
       setIsFileProcessing(false);
@@ -733,11 +867,30 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
                 >
                   <option value="environment">📷 الكاميرا الخلفية (تلقائي)</option>
-                  {cameras.map((cam, i) => (
-                    <option key={cam.id} value={cam.id}>
-                      {cam.label || `كاميرا رقم ${i + 1}`}
-                    </option>
-                  ))}
+                  {(() => {
+                    const validCams = (cameras || []).filter(c => c && c.id);
+                    const mappedCameras = validCams.map((cam, idx) => ({ cam, idx }));
+                    mappedCameras.sort((a, b) => {
+                      if (a.idx === 2) return -1;
+                      if (b.idx === 2) return 1;
+                      if (a.idx === 3) return -1;
+                      if (b.idx === 3) return 1;
+                      return a.idx - b.idx;
+                    });
+                    return mappedCameras.map(({ cam, idx }) => {
+                      let label = cam.label || `كاميرا رقم ${idx}`;
+                      if (idx === 0) label = `📷 الكاميرا الخلفية الافتراضية (رقم 0)`;
+                      else if (idx === 2) label = `📷 الكاميرا الخلفية الثانية (رقم 2)`;
+                      else if (idx === 1) label = `🤳 كاميرا رقم 1 (أمامية/أخرى)`;
+                      else if (idx === 3) label = `🤳 كاميرا رقم 3 (أمامية/أخرى)`;
+                      else label = `📷 كاميرا رقم ${idx}`;
+                      return (
+                        <option key={cam.id} value={cam.id}>
+                          {label}
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
               </div>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShoppingCart, 
   Plus, 
@@ -33,12 +33,15 @@ interface PurchasesViewProps {
 
 export const PurchasesView: React.FC<PurchasesViewProps> = ({
   purchaseInvoices,
-  suppliers,
-  products,
+  suppliers: rawSuppliers,
+  products: rawProducts,
   settings,
   onSavePurchaseInvoice,
   onDeletePurchaseInvoice
 }) => {
+  const products = (rawProducts || []).filter(p => p && p.id);
+  const suppliers = (rawSuppliers || []).filter(s => s && s.id);
+
   const [showNewModal, setShowNewModal] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<PurchaseInvoice | null>(null);
 
   // New/Edit Purchase Form
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier>(suppliers[0]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(suppliers[0] || null);
   const [supplierInvNum, setSupplierInvNum] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'credit' | 'bank'>('credit');
@@ -62,10 +65,27 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const [unitCost, setUnitCost] = useState<number>(products[0]?.costPrice || 0);
   const [showPurchaseCameraScanner, setShowPurchaseCameraScanner] = useState(false);
 
+  useEffect(() => {
+    if (products.length > 0) {
+      const exists = products.some(p => p.id === selectedProductId);
+      if (!exists || !selectedProductId) {
+        setSelectedProductId(products[0].id);
+        setUnitCost(products[0].costPrice);
+      }
+    } else {
+      setSelectedProductId('');
+      setUnitCost(0);
+    }
+  }, [products, selectedProductId]);
+
   const handleOpenNewModal = () => {
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
-    if (suppliers.length > 0) setSelectedSupplier(suppliers[0]);
+    if (suppliers.length > 0) {
+      setSelectedSupplier(suppliers[0]);
+    } else {
+      setSelectedSupplier(null);
+    }
     setSupplierInvNum('');
     setInvoiceDate(new Date().toISOString().split('T')[0]);
     setPaymentMethod('credit');
@@ -100,7 +120,11 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
 
     setEditingInvoiceId(null);
     setEditingInvoiceNumber(null);
-    if (suppliers.length > 0) setSelectedSupplier(suppliers[0]);
+    if (suppliers.length > 0) {
+      setSelectedSupplier(suppliers[0]);
+    } else {
+      setSelectedSupplier(null);
+    }
     setSupplierInvNum(`AUTO-PO-${Math.floor(1000 + Math.random() * 9000)}`);
     setInvoiceDate(new Date().toISOString().split('T')[0]);
     setPaymentMethod('credit');
@@ -113,7 +137,13 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
   const handleStartEditInvoice = (inv: PurchaseInvoice) => {
     setEditingInvoiceId(inv.id);
     setEditingInvoiceNumber(inv.invoiceNumber);
-    const supp = suppliers.find(s => s.id === inv.supplierId) || suppliers[0] || { id: inv.supplierId, name: inv.supplierName };
+    const supp = suppliers.find(s => s.id === inv.supplierId) || suppliers[0] || { 
+      id: inv.supplierId, 
+      code: 'TEMP',
+      name: inv.supplierName, 
+      phone: '', 
+      openingBalance: 0 
+    };
     setSelectedSupplier(supp);
     setSupplierInvNum(inv.supplierInvoiceNumber || '');
     setInvoiceDate(inv.date);
@@ -192,13 +222,16 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     e.preventDefault();
     if (items.length === 0) return;
 
+    const supplierId = selectedSupplier?.id || '';
+    const supplierName = selectedSupplier?.name || 'مورد غير محدد';
+
     const newInv: PurchaseInvoice = {
       id: editingInvoiceId || `pur-${Date.now()}`,
       invoiceNumber: editingInvoiceNumber || `PUR-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       supplierInvoiceNumber: supplierInvNum,
       date: invoiceDate,
-      supplierId: selectedSupplier.id,
-      supplierName: selectedSupplier.name,
+      supplierId,
+      supplierName,
       items,
       subtotal,
       discountTotal,
@@ -435,13 +468,14 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">اختر المورد *</label>
                   <select
-                    value={selectedSupplier.id}
+                    value={selectedSupplier?.id || ''}
                     onChange={(e) => {
                       const s = suppliers.find(item => item.id === e.target.value);
                       if (s) setSelectedSupplier(s);
                     }}
                     className="w-full p-2.5 border border-slate-200 rounded-xl bg-white font-bold"
                   >
+                    {!selectedSupplier && <option value="">-- اختر المورد --</option>}
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
@@ -490,6 +524,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                   onClose={() => setShowPurchaseCameraScanner(false)}
                   onScanSuccess={handlePurchaseScanSuccess}
                   title="مسح باركود صنف الشراء بالكاميرا"
+                  products={products}
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">

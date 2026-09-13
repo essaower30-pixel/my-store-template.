@@ -30,7 +30,23 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Uncaught Error in React Application:', error, errorInfo);
   }
 
-  private handleReload = () => {
+  private handleReload = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const k of keys) {
+          await caches.delete(k);
+        }
+      }
+    } catch (e) {
+      console.warn('Error clearing caches on reload:', e);
+    }
     window.location.reload();
   };
 

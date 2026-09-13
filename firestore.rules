@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read and write to stores for cashier and device synchronization
+    match /stores/{storeId} {
+      allow read, write: if true;
+    }
+
+    // Allow read and write to users
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+  }
+}

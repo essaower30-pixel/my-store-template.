@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   Search, 
@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import { ShopSettings, Product, SalesInvoice, Customer, Supplier, PurchaseInvoice, User } from '../types/accounting';
 import { GlobalQuickSearchModal } from './GlobalQuickSearchModal';
-import { TabType } from './Sidebar';
 
 interface HeaderProps {
   settings: ShopSettings;
@@ -45,7 +44,7 @@ interface HeaderProps {
   syncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
   currentUser?: User | null;
   onOpenSwitchUser?: () => void;
-  onNavigateToTab?: (tab: TabType) => void;
+  onNavigateToTab?: (tab: string) => void;
   onLogout?: () => void;
 }
 
@@ -80,8 +79,22 @@ export const Header: React.FC<HeaderProps> = ({
   const [showShopMenu, setShowShopMenu] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [storeLabel, setStoreLabel] = useState<string>('');
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const storeId = urlParams.get('store');
+      if (storeId) {
+        const num = storeId.split('_')[1];
+        setStoreLabel(num ? `الفرع #${num}` : 'فرع مستقل');
+      } else {
+        setStoreLabel('');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -159,6 +172,11 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-100">
                 {settings.activityType}
               </span>
+              {storeLabel && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">
+                  {storeLabel}
+                </span>
+              )}
             </h1>
             <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
               <span>هاتف: {settings.phone}</span>
@@ -259,10 +277,10 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'bg-slate-400'
               }`}></span>
               <span>
-                {syncStatus === 'synced' && 'الشبكة المركزية: متصل ومزامن ✓'}
-                {syncStatus === 'syncing' && 'جاري المزامنة مع الأجهزة...'}
-                {syncStatus === 'error' && 'مشكلة بمزامنة الشبكة (مؤقت)'}
-                {syncStatus === 'idle' && 'الشبكة المركزية جاهزة'}
+                {syncStatus === 'synced' && 'سحابة Firebase: متصل ومزامن ✓'}
+                {syncStatus === 'syncing' && 'جاري المزامنة السحابية...'}
+                {syncStatus === 'error' && 'مشكلة بالمزامنة (مؤقت)'}
+                {syncStatus === 'idle' && 'سحابة Firebase جاهزة'}
               </span>
             </div>
           )}

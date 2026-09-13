@@ -41,6 +41,10 @@ interface DashboardViewProps {
   onOpenVouchers: () => void;
   onOpenProducts: () => void;
   onSelectInvoice: (inv: SalesInvoice) => void;
+  onOpenCustomers?: () => void;
+  onOpenSuppliers?: () => void;
+  onOpenChartOfAccounts?: () => void;
+  onOpenReports?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -56,7 +60,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenPurchases,
   onOpenVouchers,
   onOpenProducts,
-  onSelectInvoice
+  onSelectInvoice,
+  onOpenCustomers,
+  onOpenSuppliers,
+  onOpenChartOfAccounts,
+  onOpenReports
 }) => {
   // Financial calculations
   const totalSalesAmount = salesInvoices.reduce((sum, inv) => sum + inv.netTotal, 0);
@@ -137,9 +145,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* Bento Stat 1: Total Sales */}
-        <div className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div 
+          onClick={onOpenPOS}
+          className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer group"
+          title="الانتقال إلى كاشير البيع"
+        >
           <div className="flex justify-between items-start">
-            <div className="bg-emerald-100/80 p-3.5 rounded-2xl text-emerald-700">
+            <div className="bg-emerald-100/80 p-3.5 rounded-2xl text-emerald-700 group-hover:scale-110 transition-transform">
               <TrendingUp className="w-6 h-6" />
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
@@ -148,16 +160,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-4">
             <p className="text-gray-500 text-xs font-bold">إجمالي المبيعات (اليوم)</p>
-            <h3 className="text-2xl font-extrabold text-gray-900 mt-1 font-mono tracking-tight">
+            <h3 className="text-2xl font-extrabold text-gray-900 mt-1 font-mono tracking-tight group-hover:text-emerald-600 transition-colors">
               {totalSalesAmount.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {settings.currencySymbol}
             </h3>
           </div>
         </div>
 
         {/* Bento Stat 2: Total Purchases */}
-        <div className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div 
+          onClick={onOpenPurchases}
+          className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer group"
+          title="الانتقال إلى فاتورة الشراء"
+        >
           <div className="flex justify-between items-start">
-            <div className="bg-rose-100/80 p-3.5 rounded-2xl text-rose-700">
+            <div className="bg-rose-100/80 p-3.5 rounded-2xl text-rose-700 group-hover:scale-110 transition-transform">
               <Receipt className="w-6 h-6" />
             </div>
             <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
@@ -166,14 +182,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="mt-4">
             <p className="text-gray-500 text-xs font-bold">إجمالي المشتريات</p>
-            <h3 className="text-2xl font-extrabold text-gray-900 mt-1 font-mono tracking-tight">
+            <h3 className="text-2xl font-extrabold text-gray-900 mt-1 font-mono tracking-tight group-hover:text-rose-600 transition-colors">
               {totalPurchasesAmount.toLocaleString('ar-SA', { minimumFractionDigits: 2 })} {settings.currencySymbol}
             </h3>
           </div>
         </div>
 
         {/* Bento Hero Card: Fixed Assets & Safe Balance */}
-        <div className="col-span-1 md:col-span-2 bg-indigo-600 rounded-[2rem] p-6 text-white shadow-lg flex items-center justify-between gap-6">
+        <div 
+          onClick={onOpenChartOfAccounts}
+          className="col-span-1 md:col-span-2 bg-indigo-600 rounded-[2rem] p-6 text-white shadow-lg flex items-center justify-between gap-6 hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer group"
+          title="الانتقال إلى شجرة الحسابات"
+        >
           <div className="flex-1 space-y-2">
             <span className="text-indigo-200 text-xs font-bold uppercase tracking-wider">النقدية والأصول بالحسابات</span>
             <h3 className="text-3xl font-extrabold font-mono tracking-tight text-white">
@@ -228,15 +248,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="mt-4 p-3 bg-gray-50 border border-gray-100 rounded-2xl flex justify-between items-center text-xs">
-            <span className="font-bold text-slate-700">ديون مستحقة للزبائن:</span>
-            <span className="font-mono font-bold text-amber-700">{totalReceivables.toFixed(2)} {settings.currencySymbol}</span>
-            <span className="font-bold text-slate-700 mr-4">ديون الموردين:</span>
-            <span className="font-mono font-bold text-rose-700">{totalPayables.toFixed(2)} {settings.currencySymbol}</span>
+            <div 
+              onClick={onOpenCustomers}
+              className="flex items-center gap-1 hover:text-indigo-600 hover:scale-105 cursor-pointer transition-all"
+              title="الانتقال إلى حسابات الزبائن والديون"
+            >
+              <span className="font-bold text-slate-700">ديون مستحقة للزبائن:</span>
+              <span className="font-mono font-bold text-amber-700">{totalReceivables.toFixed(2)} {settings.currencySymbol}</span>
+            </div>
+            <div 
+              onClick={onOpenSuppliers}
+              className="flex items-center gap-1 hover:text-rose-600 hover:scale-105 cursor-pointer transition-all mr-4"
+              title="الانتقال إلى حسابات الموردين والديون"
+            >
+              <span className="font-bold text-slate-700">ديون الموردين:</span>
+              <span className="font-mono font-bold text-rose-700">{totalPayables.toFixed(2)} {settings.currencySymbol}</span>
+            </div>
           </div>
         </div>
 
         {/* Bento Active Products Panel (1 col) */}
-        <div className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between">
+        <div 
+          onClick={onOpenProducts}
+          className="col-span-1 bg-white border border-gray-100 rounded-[2rem] p-6 shadow-xs flex flex-col justify-between hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer group"
+          title="الانتقال إلى المخزون والأصناف"
+        >
           <div>
             <h3 className="font-bold text-base text-indigo-950 mb-4 flex items-center gap-2">
               <span>📦</span>
@@ -264,7 +300,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <button
-            onClick={onOpenProducts}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenProducts();
+            }}
             className="w-full mt-4 py-2.5 border border-dashed border-gray-300 hover:border-indigo-500 hover:text-indigo-600 text-gray-500 text-xs font-bold rounded-xl transition-all cursor-pointer"
           >
             إضافة / إدارة أصناف المخزن +
@@ -272,7 +311,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Bento Chart of Accounts Preview Block (1 col) */}
-        <div className="col-span-1 bg-indigo-950 rounded-[2rem] p-6 text-white shadow-sm flex flex-col justify-between">
+        <div 
+          onClick={onOpenChartOfAccounts}
+          className="col-span-1 bg-indigo-950 rounded-[2rem] p-6 text-white shadow-sm flex flex-col justify-between hover:shadow-md hover:scale-[1.02] transition-all cursor-pointer group"
+          title="الانتقال إلى شجرة الحسابات الكاملة"
+        >
           <div>
             <h3 className="font-bold text-base text-white mb-3 flex items-center gap-2">
               <span>🌳</span>
@@ -308,8 +351,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-indigo-800/80 flex justify-between items-center text-xs font-bold">
-            <span className="text-indigo-300">مجمل أرباح البيع</span>
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenReports?.();
+            }}
+            className="mt-4 pt-3 border-t border-indigo-800/80 flex justify-between items-center text-xs font-bold hover:text-emerald-400 transition-colors"
+            title="الانتقال إلى التقارير المالية والربحية"
+          >
+            <span className="text-indigo-300 group-hover:text-indigo-200 transition-colors">مجمل أرباح البيع</span>
             <span className="font-mono text-emerald-400 text-sm">+{grossProfitEstimate.toFixed(0)} {settings.currencySymbol}</span>
           </div>
         </div>
@@ -317,7 +367,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </section>
 
       {/* Sales & Purchases Trend Chart Bento Container */}
-      <div className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-xs space-y-4">
+      <div 
+        onClick={onOpenReports}
+        className="bg-white rounded-[2rem] p-6 border border-gray-100 shadow-xs space-y-4 hover:shadow-md hover:scale-[1.01] transition-all cursor-pointer group"
+        title="الانتقال إلى التقارير والرسوم البيانية الكاملة"
+      >
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold text-indigo-950 text-base">مقارنة حركة المبيعات والمشتريات الأسبوعية</h3>

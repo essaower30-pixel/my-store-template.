@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, Check, WifiOff, Sparkles, AlertCircle, Share2, MoreVertical } from 'lucide-react';
+import { Smartphone, Download, X, Check, WifiOff, Sparkles, AlertCircle, Share2, MoreVertical, Copy } from 'lucide-react';
 
 interface PWAInstallModalProps {
   isOpen: boolean;
@@ -11,11 +11,46 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [activeTab, setActiveTab] = useState<'android' | 'ios'>('android');
+  const [isInApp, setIsInApp] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const getDynamicInstallUrl = () => {
+    if (typeof window === 'undefined') return '';
+    let origin = window.location.origin;
+    if (origin.includes('ais-dev-')) {
+      origin = origin.replace('ais-dev-', 'ais-pre-');
+    }
+    return origin + window.location.search;
+  };
+
+  const handleCopyLink = () => {
+    if (typeof window !== 'undefined') {
+      const directUrl = getDynamicInstallUrl();
+      navigator.clipboard.writeText(directUrl).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      });
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const ua = navigator.userAgent || '';
+      const isInstagram = ua.indexOf('Instagram') > -1;
+      const isFacebook = (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1);
+      const isWhatsApp = ua.indexOf('WhatsApp') > -1;
+      const isTelegram = ua.indexOf('Telegram') > -1;
+      const isMessenger = ua.indexOf('Messenger') > -1;
+      const isInAppWebview = isInstagram || isFacebook || isWhatsApp || isTelegram || isMessenger;
+      setIsInApp(isInAppWebview);
+
       if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
         setIsInstalled(true);
+      }
+
+      // Check if already captured globally on startup
+      if ((window as any).deferredPrompt) {
+        setDeferredPrompt((window as any).deferredPrompt);
       }
 
       const handleBeforeInstallPrompt = (e: Event) => {
@@ -23,10 +58,18 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
         setDeferredPrompt(e);
       };
 
+      const handleCustomReady = (e: any) => {
+        if (e.detail) {
+          setDeferredPrompt(e.detail);
+        }
+      };
+
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.addEventListener('pwa-prompt-ready', handleCustomReady);
 
       return () => {
         window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.removeEventListener('pwa-prompt-ready', handleCustomReady);
       };
     }
   }, []);
@@ -97,17 +140,70 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({ isOpen, onClos
             </div>
           )}
 
+          {/* Direct Link Copier */}
+          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <Share2 className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-xs font-extrabold text-indigo-950">رابط التطبيق المباشر (للزبائن ولتثبيت ممتاز)</h4>
+                <p className="text-[10px] text-indigo-700 font-medium leading-relaxed">
+                  انسخ هذا الرابط المباشر وأرسله لزبائنك، أو افتحه بنفسك في متصفح <strong>Chrome</strong> أو <strong>Safari</strong> الرسمي بدلاً من فيسبوك/واتساب ليظهر لك زر "تثبيت التطبيق" بدلاً من "إنشاء اختصار".
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={getDynamicInstallUrl()}
+                className="flex-1 bg-white border border-indigo-200 rounded-xl px-3 py-2 text-[11px] font-mono text-left text-indigo-950 select-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold shadow-sm transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 shrink-0 ${
+                  copied
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>تم النسخ!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ الرابط</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* Explanation Box */}
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs leading-relaxed space-y-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs leading-relaxed space-y-3">
             <div className="flex items-start gap-2 font-bold text-amber-950 text-sm">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>لماذا تظهر أحياناً "Please wait while your application starts..."؟</span>
+              <span>لماذا يظهر للزبون خيار "إنشاء اختصار" فقط بدلاً من "تثبيت التطبيق"؟</span>
             </div>
-            <p>
-              تظهر هذه الشاشة عند فتح الرابط عبر المتصفح لأن الخادم المؤقت يستغرق ثوانٍ للاستيقاظ. 
-              <br />
-              <strong>الحل الجذري لمنع ذلك نهائياً:</strong> قم بتثبيت البرنامج كـ <strong>"تطبيق محلي على الهاتف" (PWA)</strong> لكي يفتح فوراً بلمسة واحدة من ذاكرة الهاتف وتعمل عليه بحرية كاملة وبدون أي انتظار حتى عند انقطاع النت!
+            <p className="text-[11px] leading-relaxed">
+              هناك <strong>سببان رئيسيان</strong> لمنع التثبيت المباشر وظهور خيار "إنشاء اختصار":
             </p>
+            <ul className="list-decimal list-inside space-y-1.5 text-[11px] text-amber-950 pr-1">
+              <li>
+                <strong>الفتح من داخل واتساب أو فيسبوك (متصفح داخلي):</strong> إذا ضغط الزبون على الرابط المرسل إليه في الواتساب أو ماسنجر، فإنه يفتح داخل متصفح واتساب الداخلي (WebView) وليس المتصفح الرسمي للجوال. المتصفحات الداخلية <strong>تمنع</strong> تثبيت البرمجيات تماماً وتعطي خيار "إنشاء اختصار" كبديل ضعيف.
+                <br />
+                <span className="text-emerald-700 font-extrabold block mt-0.5">💡 الحل: اضغط على النقاط الثلاث بالأعلى واختر "الفتح في متصفح كروم / Safari" أو انسخ الرابط وافتحه يدوياً في المتصفح الرسمي.</span>
+              </li>
+              <li>
+                <strong>السرعة الزائدة قبل تسجيل ملفات النظام:</strong> يحتاج المتصفح من 3 إلى 5 ثوانٍ عند أول فتح لتسجيل ملف المزامنة (Service Worker) والتحقق من أمان الرابط. إذا حاول المستخدم التثبيت فوراً قبل ذلك، سيعطيه المتصفح خيار "إنشاء اختصار".
+                <br />
+                <span className="text-indigo-700 font-extrabold block mt-0.5">💡 الحل: انتظر 5 ثوانٍ ثم حدّث (Refresh) الصفحة، وسيتحول الخيار فوراً إلى "تثبيت التطبيق" أو "فتح التاجر الذكي".</span>
+              </li>
+            </ul>
           </div>
 
           {/* Native Direct Install Button if available */}

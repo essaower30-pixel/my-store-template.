@@ -23,7 +23,9 @@ import {
   Eye, 
   History, 
   Edit3,
-  Users
+  Users,
+  Keyboard,
+  KeyboardOff
 } from 'lucide-react';
 import { Product, Customer, SalesInvoice, InvoiceItem, ShopSettings } from '../types/accounting';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
@@ -39,17 +41,21 @@ interface SalesPOSViewProps {
   onSaveSalesInvoice: (invoice: SalesInvoice) => void;
   onDeleteSalesInvoice?: (invoiceId: string) => void;
   onSelectInvoiceForPrint: (invoice: SalesInvoice) => void;
+  onAddProduct?: (prod: Product) => void;
 }
 
 export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
-  products,
+  products: rawProducts,
   customers,
   settings,
   salesInvoices = [],
   onSaveSalesInvoice,
   onDeleteSalesInvoice,
-  onSelectInvoiceForPrint
+  onSelectInvoiceForPrint,
+  onAddProduct
 }) => {
+  const products = (rawProducts || []).filter(p => p && p.id);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showSalesHistoryModal, setShowSalesHistoryModal] = useState(false);
@@ -79,9 +85,97 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
   const [showImageSearchModal, setShowImageSearchModal] = useState(false);
   const [isFastScanMode, setIsFastScanMode] = useState<boolean>(true);
 
+  // Quick Add Product States
+  const [showQuickAddModal, setShowQuickAddModal] = useState<boolean>(false);
+  const [quickAddBarcode, setQuickAddBarcode] = useState<string>('');
+  const [quickAddName, setQuickAddName] = useState<string>('');
+  const [quickAddSellingPrice, setQuickAddSellingPrice] = useState<number | ''>('');
+  const [quickAddCostPrice, setQuickAddCostPrice] = useState<number | ''>('');
+  const [quickAddCategory, setQuickAddCategory] = useState<string>('عام / غير محدد');
+  const [quickAddUnit, setQuickAddUnit] = useState<string>('قطعة');
+  const [quickAddStock, setQuickAddStock] = useState<number>(50);
+
+  // Keep focus automation state
+  const [isKeepFocus, setIsKeepFocus] = useState<boolean>(true);
+  const [isKeyboardEnabled, setIsKeyboardEnabled] = useState<boolean>(false);
+
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const lastScanRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
   const lastAnyScanTimeRef = useRef<number>(0);
+
+  // Programmatic focus on mount
+  useEffect(() => {
+    if (barcodeInputRef.current) {
+      setTimeout(() => {
+        if (barcodeInputRef.current) {
+          barcodeInputRef.current.focus();
+        }
+      }, 300);
+    }
+  }, []);
+
+  // Permanent autofocus listener
+  useEffect(() => {
+    if (!isKeepFocus) return;
+
+    const handleFocusCheck = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      // 1. If any modal/dialog is open, do NOT programmatically steal focus to the background input
+      const hasOpenModal = !!document.querySelector('.modal') || 
+                           !!document.querySelector('[role="dialog"]') ||
+                           !!document.querySelector('.fixed.inset-0.z-50') ||
+                           showQuickAddModal || 
+                           showSalesHistoryModal || 
+                           showCameraModal || 
+                           showImageSearchModal;
+      
+      if (hasOpenModal) return;
+
+      // 2. If the user clicked on any interactive element (buttons, tabs, inputs, selects), do NOT refocus
+      const clickedInteractive = target.closest('button') || 
+                                 target.closest('input') || 
+                                 target.closest('textarea') || 
+                                 target.closest('select') || 
+                                 target.closest('a') ||
+                                 target.closest('[role="button"]') ||
+                                 target.closest('.cursor-pointer');
+
+      if (clickedInteractive) return;
+
+      // Delay slightly to let click events target other elements first
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (active) {
+          const isInput = active.tagName === 'INPUT' || 
+                         active.tagName === 'TEXTAREA' || 
+                         active.tagName === 'SELECT' || 
+                         (active as HTMLElement).isContentEditable;
+          if (isInput && active !== barcodeInputRef.current) {
+            // User intentionally clicked another form field, let them focus there
+            return;
+          }
+        }
+        
+        // Final sanity check: if modal is not open, refocus the barcode input
+        if (
+          barcodeInputRef.current && 
+          !showQuickAddModal && 
+          !showSalesHistoryModal && 
+          !showCameraModal && 
+          !showImageSearchModal
+        ) {
+          barcodeInputRef.current.focus();
+        }
+      }, 100);
+    };
+
+    document.addEventListener('mouseup', handleFocusCheck);
+    return () => {
+      document.removeEventListener('mouseup', handleFocusCheck);
+    };
+  }, [isKeepFocus, showQuickAddModal, showSalesHistoryModal, showCameraModal, showImageSearchModal]);
 
   const handleStartEditSalesInvoice = (inv: SalesInvoice) => {
     setEditingInvoiceId(inv.id);
@@ -113,18 +207,19 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
     const cleanCode = cleanBarcode(scannedCode);
     if (!cleanCode) return;
 
-    // Prevent duplicate triggers/bounce within 500ms for consecutive scans
     const now = Date.now();
-    if (now - lastAnyScanTimeRef.current < 500) {
-      console.log('Ignoring rapid consecutive barcode scan within 500ms');
+    // Allow scanning the same barcode faster (350ms buffer) to handle consecutive scans of same item easily
+    if (lastScanRef.current.code === cleanCode && (now - lastScanRef.current.time) < 350) {
+      console.log('Ignoring rapid double scan of the SAME barcode within 350ms');
+      return;
+    }
+
+    // Allow quick scanning of different barcodes (100ms buffer)
+    if (now - lastAnyScanTimeRef.current < 100) {
+      console.log('Ignoring rapid consecutive scan of DIFFERENT barcodes within 100ms');
       return;
     }
     lastAnyScanTimeRef.current = now;
-
-    // Prevent duplicate triggers of the SAME barcode within 2500ms
-    if (lastScanRef.current.code === cleanCode && (now - lastScanRef.current.time) < 2500) {
-      return;
-    }
 
     // 1. Robust Barcode match
     let match = products.find(p => isBarcodeMatch(p.barcode, cleanCode));
@@ -152,11 +247,24 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       }
       setSearchTerm('');
     } else {
-      if (!isFromCamera) {
-        playErrorBeep();
-        alert(`تم قراءة الباركود: "${scannedCode}"\nعذراً، لم يتم العثور على صنف بهذا الباركود في المخزن.`);
-      }
+      playErrorBeep();
       setSearchTerm('');
+      
+      // Instead of browser freezing alert, trigger the Quick-Add Product Modal!
+      setQuickAddBarcode(scannedCode);
+      setQuickAddName('');
+      setQuickAddSellingPrice('');
+      setQuickAddCostPrice('');
+      setQuickAddCategory('عام / غير محدد');
+      setQuickAddUnit('قطعة');
+      setQuickAddStock(50);
+      
+      // If camera scanner modal was open, close it so they can add the product
+      if (isFromCamera) {
+        setShowCameraModal(false);
+      }
+      
+      setShowQuickAddModal(true);
     }
   };
 
@@ -201,20 +309,29 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
   useEffect(() => {
     let scannedBuffer = '';
     let lastKeyTime = Date.now();
+    let processTimeout: any = null;
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // 1. Ignore if typing inside any form input fields (input, textarea, select)
+      // Ignore modifier combinations
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
       const target = e.target as HTMLElement;
+      // 1. Ignore if typing inside any other form input fields (input, textarea, select)
       if (target && (
         target.tagName === 'INPUT' || 
         target.tagName === 'TEXTAREA' || 
         target.tagName === 'SELECT' || 
         target.isContentEditable
       )) {
+        if (target === barcodeInputRef.current) {
+          // If typing inside the barcode search input itself, let form submit handle it and clear buffer
+          scannedBuffer = '';
+          return;
+        }
         return;
       }
 
-      // 2. Filter out non-printable keys (like Shift, Alt, Ctrl, Escape, etc.)
+      // 2. Filter out non-printable keys
       if (e.key.length > 1 && e.key !== 'Enter') {
         return;
       }
@@ -223,15 +340,16 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       const diff = now - lastKeyTime;
       lastKeyTime = now;
 
-      // Hardware scanners type extremely fast (usually < 50ms per key)
-      // If the difference is too long, we assume it was a manual slow keypress and reset the buffer.
-      // However, we can be slightly lenient (e.g., 80ms) to support cheap scanners or slow connections.
-      if (diff > 80) {
+      // Wireless/cheap scanners can type slowly, so we raise character timing threshold to 200ms
+      if (diff > 200) {
         scannedBuffer = '';
       }
 
+      if (processTimeout) {
+        clearTimeout(processTimeout);
+      }
+
       if (e.key === 'Enter') {
-        // If they scanned something and pressed Enter, or the hardware scanner finished typing
         if (scannedBuffer.length >= 3) {
           e.preventDefault();
           const finalCode = scannedBuffer;
@@ -240,17 +358,75 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
         }
       } else {
         scannedBuffer += e.key;
+
+        // Auto-submit timeout fallback (if physical scanner does not send Enter at the end)
+        processTimeout = setTimeout(() => {
+          if (scannedBuffer.length >= 4) {
+            const finalCode = scannedBuffer;
+            scannedBuffer = '';
+            processBarcodeScan(finalCode);
+          }
+        }, 150);
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
+      if (processTimeout) clearTimeout(processTimeout);
     };
-  }, [products]);
+  }, [products, showQuickAddModal]);
 
   const changeDue = Math.max(0, paidAmount - netTotal);
   const remainingAmount = Math.max(0, netTotal - paidAmount);
+
+  const toggleCartItemUnit = (productId: string, sellAsSubUnit: boolean) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item.productId === productId) {
+          const product = products.find(p => p.id === productId);
+          if (!product || !product.hasSubUnits) return item;
+
+          const unitName = sellAsSubUnit ? (product.subUnitName || 'حبة') : product.unit;
+          const unitPrice = sellAsSubUnit 
+            ? (product.subUnitSellingPrice || (product.sellingPrice / (product.subUnitsPerUnit || 24))) 
+            : product.sellingPrice;
+
+          // Recalculate quantity to respect available stock if toggled
+          const availableStock = Number(product.stock) || 0;
+          const limitFactor = sellAsSubUnit ? (1 / (product.subUnitsPerUnit || 24)) : 1;
+          
+          let targetQty = item.quantity;
+          if (sellAsSubUnit && !item.isSubUnit) {
+            // Default to 1 piece instead of multiplying by subUnitsPerUnit as requested by the user
+            targetQty = 1;
+          } else if (!sellAsSubUnit && item.isSubUnit) {
+            // Default to 1 carton when switching back
+            targetQty = 1;
+          }
+
+          const requiredStock = targetQty * limitFactor;
+          if (requiredStock > availableStock) {
+            const maxAllowed = sellAsSubUnit ? Math.floor(availableStock * (product.subUnitsPerUnit || 24)) : Math.floor(availableStock);
+            targetQty = Math.max(1, maxAllowed);
+          }
+
+          const lineSub = targetQty * unitPrice;
+          const lineDisc = Math.min(lineSub, item.discount || 0);
+
+          return {
+            ...item,
+            isSubUnit: sellAsSubUnit,
+            unit: unitName,
+            unitPrice: unitPrice,
+            quantity: targetQty,
+            total: Math.max(0, lineSub - lineDisc)
+          };
+        }
+        return item;
+      });
+    });
+  };
 
   const addToCart = (product: Product) => {
     const availableStock = Number(product.stock) || 0;
@@ -263,16 +439,22 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       const existingIndex = prev.findIndex(item => item.productId === product.id);
       if (existingIndex > -1) {
         const updated = [...prev];
-        const newQty = updated[existingIndex].quantity + 1;
-        if (newQty > availableStock) {
-          alert(`الكمية المتاحة في المخزن لهذا الصنف هي ${availableStock} ${product.unit}`);
+        const item = updated[existingIndex];
+        const newQty = item.quantity + 1;
+        const limitFactor = (item.isSubUnit && product.subUnitsPerUnit) ? (1 / product.subUnitsPerUnit) : 1;
+        const requiredStock = newQty * limitFactor;
+
+        if (requiredStock > availableStock) {
+          const maxAllowed = item.isSubUnit ? Math.floor(availableStock * (product.subUnitsPerUnit || 1)) : availableStock;
+          alert(`الكمية المتاحة في المخزن لهذا الصنف هي ${maxAllowed} ${item.unit}`);
           return prev;
         }
-        const lineSub = newQty * updated[existingIndex].unitPrice;
-        const lineDisc = Math.min(lineSub, updated[existingIndex].discount || 0);
-        updated[existingIndex].quantity = newQty;
-        updated[existingIndex].discount = lineDisc;
-        updated[existingIndex].total = Math.max(0, lineSub - lineDisc);
+
+        const lineSub = newQty * item.unitPrice;
+        const lineDisc = Math.min(lineSub, item.discount || 0);
+        item.quantity = newQty;
+        item.discount = lineDisc;
+        item.total = Math.max(0, lineSub - lineDisc);
         return updated;
       } else {
         return [
@@ -285,7 +467,8 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
             quantity: 1,
             unitPrice: product.sellingPrice,
             discount: 0,
-            total: product.sellingPrice
+            total: product.sellingPrice,
+            isSubUnit: false
           }
         ];
       }
@@ -297,8 +480,18 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       return prev.map(item => {
         if (item.productId === productId) {
           const product = products.find(p => p.id === productId);
-          const maxStock = product ? (Number(product.stock) || 0) : 999;
-          const newQty = Math.max(1, Math.min(maxStock, item.quantity + delta));
+          const availableStock = product ? (Number(product.stock) || 0) : 999;
+          
+          const limitFactor = (item.isSubUnit && product?.subUnitsPerUnit) ? (1 / product.subUnitsPerUnit) : 1;
+          const newQty = Math.max(1, item.quantity + delta);
+          const requiredStock = newQty * limitFactor;
+
+          if (product && requiredStock > availableStock) {
+            const maxAllowed = item.isSubUnit ? Math.floor(availableStock * (product.subUnitsPerUnit || 1)) : availableStock;
+            alert(`الكمية المتاحة في المخزن لهذا الصنف هي ${maxAllowed} ${item.unit}`);
+            return item;
+          }
+
           const lineSub = newQty * item.unitPrice;
           const lineDisc = Math.min(lineSub, item.discount || 0);
           return {
@@ -384,6 +577,43 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
     setDiscountInput(0);
     setNotes('');
     setSelectedDelegate('');
+
+    // Programmatically refocus barcode input after completing sale
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 150);
+  };
+
+  const handleQuickProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddName.trim() || quickAddSellingPrice === '') return;
+
+    const newProduct: Product = {
+      id: `prod-${Date.now()}`,
+      barcode: quickAddBarcode,
+      name: quickAddName.trim(),
+      category: quickAddCategory || 'عام / غير محدد',
+      unit: quickAddUnit || 'قطعة',
+      costPrice: Number(quickAddCostPrice) || 0,
+      sellingPrice: Number(quickAddSellingPrice) || 0,
+      stock: Number(quickAddStock) || 50,
+      minStockAlert: 5,
+    };
+
+    if (onAddProduct) {
+      onAddProduct(newProduct);
+    }
+    
+    // Immediately add 1 unit to POS cart
+    addToCart(newProduct);
+    
+    // Close modal & refocus barcode input
+    setShowQuickAddModal(false);
+    setTimeout(() => {
+      if (barcodeInputRef.current) {
+        barcodeInputRef.current.focus();
+      }
+    }, 150);
   };
 
   return (
@@ -402,11 +632,36 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                 <input
                   ref={barcodeInputRef}
                   type="text"
-                  placeholder="امسح الباركود أو ابحث باسم الصنف..."
+                  inputMode={isKeyboardEnabled ? 'text' : 'none'}
+                  placeholder={isKeyboardEnabled ? "اكتب اسم الصنف أو الباركود..." : "امسح الباركود هنا (الكيبورد مخفي) ⚡"}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pr-10 pl-4 py-2.5 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pr-10 pl-12 py-2.5 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsKeyboardEnabled(!isKeyboardEnabled);
+                    // Focus back to input so the new inputMode applies immediately
+                    setTimeout(() => {
+                      if (barcodeInputRef.current) {
+                        barcodeInputRef.current.focus();
+                      }
+                    }, 50);
+                  }}
+                  className={`absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg transition-all ${
+                    isKeyboardEnabled 
+                      ? 'bg-emerald-100 text-emerald-700 font-extrabold scale-110' 
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  }`}
+                  title={isKeyboardEnabled ? "إخفاء لوحة مفاتيح الكيبورد الافتراضية" : "إظهار لوحة مفاتيح الكيبورد للكتابة اليدوية"}
+                >
+                  {isKeyboardEnabled ? (
+                    <Keyboard className="w-4 h-4" />
+                  ) : (
+                    <KeyboardOff className="w-4 h-4" />
+                  )}
+                </button>
               </form>
 
               {/* Mobile Camera Barcode Scanner Button */}
@@ -443,28 +698,58 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
               </button>
             </div>
 
-            {/* Fast Scan Mode Info & Toggle Bar */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 p-3 rounded-xl">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 animate-pulse shrink-0" />
-                <div className="text-right">
-                  <span className="text-xs font-black text-slate-800 dark:text-slate-200">وضع المسح السريع بالذكاء الاصطناعي (Fast Scan Mode) ⚡</span>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">عند النقر على "بحث بالصورة 📷"، وجه الكاميرا للمنتج وسيتم التعرف عليه وإضافته فوراً للسلة وبشكل مستمر دون توقف!</p>
+            {/* Dual-Toggle Mode Bar: Fast Scan & Permanent Autofocus */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 p-3 rounded-xl">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 animate-pulse shrink-0" />
+                  <div className="text-right">
+                    <span className="text-xs font-black text-slate-800">وضع التعرف السريع بالذكاء الاصطناعي ⚡</span>
+                    <p className="text-[10px] text-slate-500 mt-0.5">التعرف التلقائي على الصنف عبر الكاميرا والبحث الذكي بالصورة</p>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsFastScanMode(!isFastScanMode)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                  isFastScanMode ? 'bg-purple-600' : 'bg-slate-300 dark:bg-slate-700'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                    isFastScanMode ? '-translate-x-5' : 'translate-x-0'
+                <button
+                  type="button"
+                  onClick={() => setIsFastScanMode(!isFastScanMode)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isFastScanMode ? 'bg-purple-600' : 'bg-slate-300'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      isFastScanMode ? '-translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t md:border-t-0 md:border-r border-slate-200 md:pr-4 pt-2.5 md:pt-0">
+                <div className="flex items-center gap-2">
+                  <Barcode className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="text-right">
+                    <span className="text-xs font-black text-slate-800">التركيز التلقائي الدائم على القارئ 🎯</span>
+                    <p className="text-[10px] text-slate-500 mt-0.5">تثبيت مؤشر الكتابة في حقل الباركود تلقائياً للمسح المتتالي بلا توقف</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsKeepFocus(!isKeepFocus);
+                    if (!isKeepFocus) {
+                      setTimeout(() => barcodeInputRef.current?.focus(), 100);
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isKeepFocus ? 'bg-emerald-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      isKeepFocus ? '-translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             {/* AI Image Search Modal Component */}
@@ -542,19 +827,52 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                     ) : null}
                     <div className="overflow-hidden flex-1">
                       <span className="text-[10px] font-bold text-slate-400 block mb-0.5 truncate">{prod.category}</span>
-                      <h4 className="font-bold text-slate-800 text-xs line-clamp-2 leading-tight">{prod.name}</h4>
+                      <h4 className="font-bold text-slate-800 text-xs line-clamp-2 leading-tight">
+                        {prod.name}
+                        {prod.hasSubUnits && (
+                          <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1 py-0.5 rounded border border-indigo-100/50 inline-block mr-1">
+                            شد {prod.subUnitsPerUnit}
+                          </span>
+                        )}
+                      </h4>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                    <span className="font-mono font-black text-sm text-emerald-700">
-                      {prod.sellingPrice.toFixed(2)} {settings.currencySymbol}
-                    </span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                      outOfStock ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {outOfStock ? 'نفد' : `${prod.stock} ${prod.unit}`}
-                    </span>
+                  <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1 w-full text-right">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-black text-sm text-emerald-700">
+                        {prod.sellingPrice.toFixed(0)} {settings.currencySymbol}
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        outOfStock ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {(() => {
+                          if (outOfStock) return 'نفد';
+                          if (!prod.hasSubUnits || !prod.subUnitsPerUnit || !prod.subUnitName) {
+                            return `${prod.stock} ${prod.unit}`;
+                          }
+                          const wholeUnits = Math.floor(prod.stock);
+                          const fraction = prod.stock - wholeUnits;
+                          const pieces = Math.round(fraction * prod.subUnitsPerUnit);
+                          
+                          if (pieces === 0) {
+                            return `${wholeUnits} ${prod.unit}`;
+                          }
+                          if (wholeUnits === 0) {
+                            return `${pieces} ${prod.subUnitName}`;
+                          }
+                          return `${wholeUnits} و ${pieces}`;
+                        })()}
+                      </span>
+                    </div>
+                    {prod.hasSubUnits && prod.subUnitsPerUnit && (
+                      <div className="text-[9px] text-slate-500 font-bold flex justify-between">
+                        <span>ال{prod.subUnitName || 'حبة'}:</span>
+                        <span className="font-mono text-emerald-600">
+                          {(prod.subUnitSellingPrice || (prod.sellingPrice / prod.subUnitsPerUnit)).toFixed(0)} {settings.currencySymbol}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -668,10 +986,10 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                     <div className="space-y-0.5 flex-1 pl-2">
                       <p className="font-bold text-slate-800 line-clamp-1">{item.productName}</p>
                       <p className="text-[10px] text-slate-400 font-mono">
-                        {item.unitPrice.toFixed(2)} × {item.quantity}
-                        {item.discount > 0 && <span className="text-amber-600 font-bold"> (خصم صنف: {item.discount.toFixed(2)})</span>}
+                        {item.unitPrice.toFixed(0)} × {item.quantity}
+                        {item.discount > 0 && <span className="text-amber-600 font-bold"> (خصم صنف: {item.discount.toFixed(0)})</span>}
                         {' = '}
-                        <span className="font-bold text-slate-800">{item.total.toFixed(2)} {settings.currencySymbol}</span>
+                        <span className="font-bold text-slate-800">{item.total.toFixed(0)} {settings.currencySymbol}</span>
                       </p>
                     </div>
 
@@ -703,6 +1021,42 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* Toggle for SubUnits */}
+                  {(() => {
+                    const product = products.find(p => p.id === item.productId);
+                    if (!product || !product.hasSubUnits) return null;
+                    return (
+                      <div className="flex items-center gap-1.5 py-1.5 text-[11px] border-t border-b border-slate-100/50">
+                        <span className="text-slate-500 font-bold">وحدة البيع بالفاتورة:</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleCartItemUnit(item.productId, false)}
+                          className={`px-2.5 py-0.5 rounded-lg font-black border transition-all text-[10px] cursor-pointer ${
+                            !item.isSubUnit 
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' 
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {product.unit}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleCartItemUnit(item.productId, true)}
+                          className={`px-2.5 py-0.5 rounded-lg font-black border transition-all text-[10px] cursor-pointer ${
+                            item.isSubUnit 
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' 
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {product.subUnitName || 'حبة'}
+                        </button>
+                        <span className="text-slate-400 mr-auto font-mono text-[9px]">
+                          (سعر الوحدة: {item.unitPrice.toFixed(0)} {settings.currencySymbol})
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Inline Item Discount Input */}
                   <div className="flex items-center gap-2 text-[10px] bg-amber-50/50 p-1.5 rounded-lg border border-amber-200/50">
@@ -847,7 +1201,7 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
               {discountTotal > 0 && (
                 <div className="text-[11px] font-extrabold text-amber-900 flex justify-between pt-1.5 border-t border-amber-200/80 font-mono">
                   <span>إجمالي قيمة الخصم المخصومة:</span>
-                  <span>-{discountTotal.toFixed(2)} {settings.currencySymbol}</span>
+                  <span>-{discountTotal.toFixed(0)} {settings.currencySymbol}</span>
                 </div>
               )}
             </div>
@@ -869,26 +1223,26 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
             <div className="bg-slate-900 text-white p-4 rounded-xl space-y-1.5 font-mono">
               <div className="flex justify-between text-xs text-slate-300">
                 <span>المجموع الفرعي:</span>
-                <span>{subtotal.toFixed(2)} {settings.currencySymbol}</span>
+                <span>{subtotal.toFixed(0)} {settings.currencySymbol}</span>
               </div>
 
               {settings.enableTax && (
                 <div className="flex justify-between text-xs text-slate-300">
                   <span>ضريبة القيمة المضافة ({settings.defaultTaxRate}%):</span>
-                  <span>{taxAmount.toFixed(2)} {settings.currencySymbol}</span>
+                  <span>{taxAmount.toFixed(0)} {settings.currencySymbol}</span>
                 </div>
               )}
 
               {discountTotal > 0 && (
                 <div className="flex justify-between text-xs text-amber-400">
                   <span>إجمالي الخصم:</span>
-                  <span>-{discountTotal.toFixed(2)} {settings.currencySymbol}</span>
+                  <span>-{discountTotal.toFixed(0)} {settings.currencySymbol}</span>
                 </div>
               )}
 
               <div className="flex justify-between text-sm font-black text-emerald-400 pt-2 border-t border-slate-800">
                 <span>الصافي المطلوب:</span>
-                <span>{netTotal.toFixed(2)} {settings.currencySymbol}</span>
+                <span>{netTotal.toFixed(0)} {settings.currencySymbol}</span>
               </div>
 
               {/* Live Gross Profit Estimate Bar */}
@@ -907,7 +1261,7 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                     const estMargin = (subtotal - discountTotal) > 0 ? (estProfit / (subtotal - discountTotal)) * 100 : 0;
                     return (
                       <span className="font-mono font-bold text-emerald-300">
-                        +{estProfit.toFixed(2)} {settings.currencySymbol} ({estMargin.toFixed(0)}%)
+                        +{estProfit.toFixed(0)} {settings.currencySymbol} ({estMargin.toFixed(0)}%)
                       </span>
                     );
                   })()}
@@ -917,14 +1271,14 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
               {paymentMethod === 'cash' && changeDue > 0 && (
                 <div className="flex justify-between text-xs text-sky-400 font-bold pt-1">
                   <span>الباقي للزبون:</span>
-                  <span>{changeDue.toFixed(2)} {settings.currencySymbol}</span>
+                  <span>{changeDue.toFixed(0)} {settings.currencySymbol}</span>
                 </div>
               )}
 
               {remainingAmount > 0 && (
                 <div className="flex justify-between text-xs text-amber-400 font-bold pt-1">
                   <span>المتبقي ديناً (آجل):</span>
-                  <span>{remainingAmount.toFixed(2)} {settings.currencySymbol}</span>
+                  <span>{remainingAmount.toFixed(0)} {settings.currencySymbol}</span>
                 </div>
               )}
             </div>
@@ -1054,6 +1408,163 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Product Modal */}
+      {showQuickAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden text-right" dir="rtl">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-emerald-600 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/20 text-white rounded-xl">
+                  <Barcode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base">إضافة سريعة لمنتج جديد ⚡</h3>
+                  <p className="text-[10px] text-emerald-100">الباركود المدخل غير مسجل. سجله فوراً لإضافته للفاتورة.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQuickAddModal(false);
+                  setTimeout(() => barcodeInputRef.current?.focus(), 150);
+                }}
+                className="p-1.5 hover:bg-emerald-700 rounded-xl transition-colors cursor-pointer text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleQuickProductSubmit} className="p-5 space-y-4">
+              
+              {/* Barcode Field (Disabled) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">الباركود المقروء</label>
+                <input
+                  type="text"
+                  value={quickAddBarcode}
+                  disabled
+                  className="w-full p-2.5 text-xs font-mono font-bold border border-slate-200 rounded-xl bg-slate-100 text-slate-500 text-center"
+                />
+              </div>
+
+              {/* Product Name */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">اسم المنتج / الصنف *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: علبة حليب المراعي 1 لتر"
+                  value={quickAddName}
+                  onChange={(e) => setQuickAddName(e.target.value)}
+                  autoFocus
+                  className="w-full p-2.5 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Pricing Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">سعر البيع * ({settings.currencySymbol})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0.01"
+                    placeholder="0.00"
+                    value={quickAddSellingPrice}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      setQuickAddSellingPrice(val);
+                      // Pre-fill cost price with a reasonable estimate (80% of selling price) if currently empty
+                      if (quickAddCostPrice === '' && val !== '') {
+                        setQuickAddCostPrice(Number((val * 0.8).toFixed(2)));
+                      }
+                    }}
+                    className="w-full p-2.5 text-xs font-bold font-mono border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">سعر التكلفة / الشراء ({settings.currencySymbol})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={quickAddCostPrice}
+                    onChange={(e) => setQuickAddCostPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full p-2.5 text-xs font-bold font-mono border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Unit & Category */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 mb-1">الوحدة</label>
+                  <input
+                    type="text"
+                    required
+                    value={quickAddUnit}
+                    onChange={(e) => setQuickAddUnit(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-bold text-slate-700 mb-1">القسم / التصنيف</label>
+                  <select
+                    value={quickAddCategory}
+                    onChange={(e) => setQuickAddCategory(e.target.value)}
+                    className="w-full p-2.5 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="عام / غير محدد">عام / غير محدد</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Stock */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">الكمية الافتتاحية للمستودع</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={quickAddStock}
+                  onChange={(e) => setQuickAddStock(Number(e.target.value))}
+                  className="w-full p-2.5 text-xs font-bold font-mono border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all cursor-pointer text-center"
+                >
+                  حفظ الصنف وإضافته للفاتورة 🛒
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuickAddModal(false);
+                    setTimeout(() => barcodeInputRef.current?.focus(), 150);
+                  }}
+                  className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

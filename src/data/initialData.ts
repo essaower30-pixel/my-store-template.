@@ -22,7 +22,11 @@ export const INITIAL_SETTINGS: ShopSettings = {
   enableTax: true,
   receiptHeader: "أهلاً وسهلاً بكم في متجرنا",
   receiptFooter: "شكراً لزيارتكم",
-  appUrl: "https://service-4115.ai.studio"
+  appUrl: "",
+  enableAutoScroll: false,
+  enableShamCash: true,
+  shamCashNumber: "963900000000",
+  shamCashQR: ""
 };
 
 export const INITIAL_ACCOUNTS: AccountNode[] = [

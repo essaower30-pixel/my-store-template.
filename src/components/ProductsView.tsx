@@ -73,7 +73,7 @@ interface ProductsViewProps {
 }
 
 export const ProductsView: React.FC<ProductsViewProps> = ({
-  products,
+  products: rawProducts,
   categoriesList = [],
   settings,
   salesInvoices = [],
@@ -90,13 +90,16 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   onDeleteProduct,
   onNavigateToPurchases
 }) => {
+  const products = (rawProducts || []).filter(p => p && p.id);
+
   // Active Tab inside Inventory Module
-  const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'alerts' | 'adjustment' | 'categories' | 'movements'>('catalog');
+  const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'alerts' | 'adjustment' | 'categories' | 'movements' | 'offers'>('catalog');
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [showOffersOnly, setShowOffersOnly] = useState(false);
 
   // Modal State for Add / Edit Product
   const [showProductModal, setShowProductModal] = useState(false);
@@ -113,6 +116,14 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [showQuickAddCat, setShowQuickAddCat] = useState(false);
   const [quickCatName, setQuickCatName] = useState('');
 
+  // Offers quick management states
+  const [offerProductIdToAdd, setOfferProductIdToAdd] = useState('');
+  const [quickOriginalPrice, setQuickOriginalPrice] = useState<string>('');
+  const [quickOfferPrice, setQuickOfferPrice] = useState<string>('');
+  const [quickEditOfferId, setQuickEditOfferId] = useState<string | null>(null);
+  const [quickEditOriginalPrice, setQuickEditOriginalPrice] = useState<string>('');
+  const [quickEditOfferPrice, setQuickEditOfferPrice] = useState<string>('');
+
   // Product Form Fields
   const [barcode, setBarcode] = useState('');
   const [name, setName] = useState('');
@@ -124,6 +135,16 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
   const [location, setLocation] = useState('');
   const [image, setImage] = useState('');
+  const [showInStore, setShowInStore] = useState<boolean>(true);
+  const [originalPrice, setOriginalPrice] = useState<number>(0);
+  const [isOffer, setIsOffer] = useState<boolean>(false);
+  const [storeId, setStoreId] = useState<string>('main');
+
+  // Sub-units states
+  const [hasSubUnits, setHasSubUnits] = useState<boolean>(false);
+  const [subUnitsPerUnit, setSubUnitsPerUnit] = useState<number>(24);
+  const [subUnitName, setSubUnitName] = useState<string>('حبة');
+  const [subUnitSellingPrice, setSubUnitSellingPrice] = useState<number>(0);
 
   // Camera & Image Search States
   const [showFormCameraScanner, setShowFormCameraScanner] = useState(false);
@@ -281,7 +302,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       matchesSearch(p.location, searchTerm);
     const matchesCat = selectedCategory === 'all' || p.category === selectedCategory;
     const matchesLowStock = !showLowStockOnly || p.stock <= p.minStockAlert;
-    return isMatched && matchesCat && matchesLowStock;
+    const matchesOffers = !showOffersOnly || p.isOffer === true;
+    return isMatched && matchesCat && matchesLowStock && matchesOffers;
   });
 
   // Low stock products list
@@ -396,7 +418,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setMinStockAlert(5);
     setLocation('');
     setImage('');
+    setShowInStore(true);
+    setOriginalPrice(0);
+    setIsOffer(false);
     setInputMethod('barcode');
+    setHasSubUnits(false);
+    setSubUnitsPerUnit(24);
+    setSubUnitName('حبة');
+    setSubUnitSellingPrice(0);
+    setStoreId('main');
     setShowProductModal(true);
   };
 
@@ -413,7 +443,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setMinStockAlert(p.minStockAlert);
     setLocation(p.location || '');
     setImage(p.image || '');
+    setShowInStore(p.showInStore !== false);
+    setOriginalPrice(p.originalPrice || 0);
+    setIsOffer(!!p.isOffer);
     setInputMethod('barcode');
+    setHasSubUnits(!!p.hasSubUnits);
+    setSubUnitsPerUnit(p.subUnitsPerUnit || 24);
+    setSubUnitName(p.subUnitName || 'حبة');
+    setSubUnitSellingPrice(p.subUnitSellingPrice || 0);
+    setStoreId(p.storeId || 'main');
     setShowProductModal(true);
   };
 
@@ -465,7 +503,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         stock: Number(stock),
         minStockAlert: Number(minStockAlert),
         location,
-        image
+        image,
+        showInStore,
+        originalPrice: Number(originalPrice) || undefined,
+        isOffer,
+        hasSubUnits,
+        subUnitsPerUnit: hasSubUnits ? Number(subUnitsPerUnit) : undefined,
+        subUnitName: hasSubUnits ? subUnitName : undefined,
+        subUnitSellingPrice: hasSubUnits ? (Number(subUnitSellingPrice) || (Number(sellingPrice) / Number(subUnitsPerUnit))) : undefined,
+        storeId: storeId || 'main'
       };
       onUpdateProduct(updated);
     } else {
@@ -480,7 +526,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         stock: Number(stock),
         minStockAlert: Number(minStockAlert),
         location,
-        image
+        image,
+        showInStore,
+        originalPrice: Number(originalPrice) || undefined,
+        isOffer,
+        hasSubUnits,
+        subUnitsPerUnit: hasSubUnits ? Number(subUnitsPerUnit) : undefined,
+        subUnitName: hasSubUnits ? subUnitName : undefined,
+        subUnitSellingPrice: hasSubUnits ? (Number(subUnitSellingPrice) || (Number(sellingPrice) / Number(subUnitsPerUnit))) : undefined,
+        storeId: storeId || 'main'
       };
       onAddProduct(newProd);
     }
@@ -495,6 +549,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       setMinStockAlert(5);
       setLocation('');
       setImage('');
+      setShowInStore(true);
+      setOriginalPrice(0);
+      setIsOffer(false);
+      setHasSubUnits(false);
+      setSubUnitsPerUnit(24);
+      setSubUnitName('حبة');
+      setSubUnitSellingPrice(0);
       setShowProductModal(true);
     } else {
       setShowProductModal(false);
@@ -642,10 +703,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           <div>
             <p className="text-xs font-bold text-gray-500">القيمة البيعية المتوقعة</p>
             <h3 className="text-2xl font-extrabold text-emerald-900 font-mono mt-1">
-              {totalStockSalesValue.toLocaleString('ar-SA', { minimumFractionDigits: 2 })}
+              {Math.round(totalStockSalesValue).toLocaleString('ar-SA')}
             </h3>
             <p className="text-[11px] font-bold text-emerald-600 mt-1 font-mono">
-              ربح متوقع: +{totalPotentialProfit.toFixed(2)} {settings.currencySymbol}
+              ربح متوقع: +{totalPotentialProfit.toFixed(0)} {settings.currencySymbol}
             </p>
           </div>
           <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-2xl flex items-center justify-center shrink-0">
@@ -748,6 +809,25 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             <History className="w-4 h-4" />
             <span>حركة وسجل المخزون الموحد</span>
           </button>
+
+          <button
+            onClick={() => setActiveSubTab('offers')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeSubTab === 'offers'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <Tag className="w-4 h-4 text-rose-500" />
+            <span>إدارة العروض والخصومات</span>
+            {products.filter(p => p.isOffer).length > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeSubTab === 'offers' ? 'bg-white text-rose-950' : 'bg-rose-100 text-rose-700'
+              }`}>
+                {products.filter(p => p.isOffer).length}
+              </span>
+            )}
+          </button>
         </div>
 
         {activeSubTab === 'catalog' && (
@@ -848,7 +928,17 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                             )}
                             <div>
                               <p className="font-bold text-indigo-950 text-xs">{prod.name}</p>
-                              <span className="text-[10px] text-gray-500 font-medium">{prod.category} ({prod.unit})</span>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                <span className="text-[10px] text-gray-500 font-medium bg-slate-50 px-1 py-0.5 rounded-md border border-slate-100">
+                                  {prod.category} ({prod.unit}
+                                  {prod.hasSubUnits && ` شد ${prod.subUnitsPerUnit} ${prod.subUnitName || 'حبة'}`})
+                                </span>
+                                {prod.isOffer && (
+                                  <span className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded-md font-black border border-rose-100 flex items-center gap-0.5" title={`عرض خاص - السعر السابق: ${prod.originalPrice || 0}`}>
+                                    <span>🔥</span> عرض خاص {prod.originalPrice && `(${Math.round(((prod.originalPrice - prod.sellingPrice)/prod.originalPrice)*100)}%-)`}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -861,15 +951,20 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         </td>
 
                         <td className="p-3.5 font-mono font-bold text-gray-700">
-                          {prod.costPrice.toFixed(2)} {settings.currencySymbol}
+                          {prod.costPrice.toFixed(0)} {settings.currencySymbol}
                         </td>
 
                         <td className="p-3.5 font-mono font-extrabold text-emerald-700">
-                          {prod.sellingPrice.toFixed(2)} {settings.currencySymbol}
+                          <div>{prod.sellingPrice.toFixed(0)} {settings.currencySymbol}</div>
+                          {prod.hasSubUnits && prod.subUnitsPerUnit && (
+                            <div className="text-[10px] text-slate-500 font-normal mt-0.5" dir="rtl">
+                              {(prod.subUnitSellingPrice || (prod.sellingPrice / prod.subUnitsPerUnit)).toFixed(0)} {settings.currencySymbol} / {prod.subUnitName || 'حبة'}
+                            </div>
+                          )}
                         </td>
 
                         <td className="p-3.5 font-mono font-bold text-indigo-900">
-                          +{margin.toFixed(2)} <span className="text-[10px] text-indigo-500">({marginPct}%)</span>
+                          +{margin.toFixed(0)} <span className="text-[10px] text-indigo-500">({marginPct}%)</span>
                         </td>
 
                         {/* Available Quantity */}
@@ -879,7 +974,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                             isLow ? 'bg-amber-100 text-amber-800 border border-amber-300' :
                             'bg-emerald-50 text-emerald-800 border border-emerald-200'
                           }`}>
-                            {prod.stock} {prod.unit}
+                            {(() => {
+                              if (!prod.hasSubUnits || !prod.subUnitsPerUnit || !prod.subUnitName) {
+                                return `${prod.stock} ${prod.unit}`;
+                              }
+                              const wholeUnits = Math.floor(prod.stock);
+                              const fraction = prod.stock - wholeUnits;
+                              const pieces = Math.round(fraction * prod.subUnitsPerUnit);
+                              
+                              if (pieces === 0) {
+                                return `${wholeUnits} ${prod.unit}`;
+                              }
+                              if (wholeUnits === 0) {
+                                return `${pieces} ${prod.subUnitName}`;
+                              }
+                              return `${wholeUnits} ${prod.unit} و ${pieces} ${prod.subUnitName}`;
+                            })()}
                           </span>
                         </td>
 
@@ -1038,7 +1148,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
 
                     <div className="flex justify-between items-center text-xs pt-1 text-gray-500">
                       <span>سعر الشراء المتوقع:</span>
-                      <span className="font-mono font-bold text-indigo-950">{estimatedCost.toFixed(2)} {settings.currencySymbol}</span>
+                      <span className="font-mono font-bold text-indigo-950">{estimatedCost.toFixed(0)} {settings.currencySymbol}</span>
                     </div>
 
                     {onNavigateToPurchases && (
@@ -1442,6 +1552,307 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUB-TAB 6: SPECIAL OFFERS MANAGEMENT (إدارة العروض الترويجية والخصومات) */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'offers' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-rose-700 via-rose-950 to-slate-900 text-white rounded-[2rem] p-6 shadow-md flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-xl font-extrabold flex items-center gap-2">
+                <Tag className="w-6 h-6 text-rose-400 animate-pulse" />
+                <span>إدارة العروض الترويجية والخصومات الحية بالمتجر</span>
+              </h2>
+              <p className="text-xs text-rose-100">
+                من هنا يمكنك متابعة وإضافة وإلغاء العروض الخاصة على السلع والمنتجات. يتم عرض السعر القديم مشطوباً ونسبة الخصم بجانب السلعة في متجر الزبون فوراً!
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Add Offer Box */}
+          <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xs space-y-4">
+            <h3 className="text-xs font-black text-rose-950 flex items-center gap-1.5 border-b border-gray-100 pb-3">
+              <span>✨</span>
+              <span>تفعيل عرض خاص جديد على صنف موجود</span>
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="block text-[11px] font-bold text-gray-700">اختر المنتج المراد تفعيل العرض له:</label>
+                <select
+                  value={offerProductIdToAdd}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setOfferProductIdToAdd(id);
+                    const prod = products.find(p => p.id === id);
+                    if (prod) {
+                      setQuickOriginalPrice(prod.sellingPrice.toString());
+                      setQuickOfferPrice((prod.sellingPrice * 0.8).toString()); // suggest 20% discount
+                    } else {
+                      setQuickOriginalPrice('');
+                      setQuickOfferPrice('');
+                    }
+                  }}
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold"
+                >
+                  <option value="">-- اختر صنفاً من المخزن لتنزيل عرض عليه --</option>
+                  {products.filter(p => !p.isOffer).map(prod => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.name} ({prod.category}) - السعر الحالي: {prod.sellingPrice} {settings.currencySymbol} [المخزون: {prod.stock}]
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-700">السعر السابق (قبل الخصم):</label>
+                <input
+                  type="number"
+                  placeholder="السعر الأصلي..."
+                  value={quickOriginalPrice}
+                  onChange={(e) => setQuickOriginalPrice(e.target.value)}
+                  className="w-full p-2 text-xs border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-700">سعر العرض الحالي الجديد:</label>
+                <input
+                  type="number"
+                  placeholder="سعر البيع بالعرض..."
+                  value={quickOfferPrice}
+                  onChange={(e) => setQuickOfferPrice(e.target.value)}
+                  className="w-full p-2 text-xs border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!offerProductIdToAdd) {
+                    alert('الرجاء اختيار المنتج أولاً!');
+                    return;
+                  }
+                  const original = parseFloat(quickOriginalPrice);
+                  const offer = parseFloat(quickOfferPrice);
+                  if (isNaN(original) || original <= 0) {
+                    alert('الرجاء إدخال سعر سابق صحيح أكبر من الصفر');
+                    return;
+                  }
+                  if (isNaN(offer) || offer <= 0) {
+                    alert('الرجاء إدخال سعر العرض صحيح أكبر من الصفر');
+                    return;
+                  }
+                  if (offer >= original) {
+                    alert('تنبيه: سعر العرض يجب أن يكون أقل من السعر السابق لكي تظهر نسبة الخصم للزبائن بشكل صحيح!');
+                  }
+
+                  const prod = products.find(p => p.id === offerProductIdToAdd);
+                  if (prod) {
+                    const updated: Product = {
+                      ...prod,
+                      isOffer: true,
+                      originalPrice: original,
+                      sellingPrice: offer
+                    };
+                    onUpdateProduct(updated);
+                    setOfferProductIdToAdd('');
+                    setQuickOriginalPrice('');
+                    setQuickOfferPrice('');
+                    alert('تم تفعيل العرض الخاص على الصنف بنجاح!');
+                  }
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-xs text-xs flex items-center gap-1.5 cursor-pointer transform active:scale-95 transition-all"
+              >
+                <span>🔥</span>
+                <span>تنشيط وتفعيل العرض الخاص</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Active Offers Table */}
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xs overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                <span>📦</span>
+                <span>العروض النشطة حالياً ({products.filter(p => p.isOffer).length})</span>
+              </h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 border-b border-gray-200 font-bold">
+                    <th className="p-3.5">الباركود</th>
+                    <th className="p-3.5">اسم الصنف والقسم</th>
+                    <th className="p-3.5 text-center">المخزون المتوفر</th>
+                    <th className="p-3.5">السعر الأصلي</th>
+                    <th className="p-3.5">سعر العرض الحالي</th>
+                    <th className="p-3.5 text-center">نسبة التخفيض</th>
+                    <th className="p-3.5 text-center">الإجراءات والتحكم</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {products.filter(p => p.isOffer).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-gray-400 font-bold">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <span className="text-3xl">🎁</span>
+                          <span>لا يوجد عروض نشطة حالياً. اختر منتجاً من المربع أعلاه لتنشيطه كعرض خاص!</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    products.filter(p => p.isOffer).map(prod => {
+                      const savings = prod.originalPrice && prod.originalPrice > prod.sellingPrice 
+                        ? Math.round(((prod.originalPrice - prod.sellingPrice) / prod.originalPrice) * 100) 
+                        : 0;
+
+                      const isEditing = quickEditOfferId === prod.id;
+
+                      return (
+                        <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3.5 font-mono text-gray-600 font-bold">
+                            {prod.barcode || '#'}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-2">
+                              {prod.image ? (
+                                <img src={prod.image} alt={prod.name} className="w-8 h-8 rounded-lg object-cover border" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-rose-50 border text-rose-700 flex items-center justify-center text-xs font-bold">🎁</div>
+                              )}
+                              <div>
+                                <span className="font-extrabold text-indigo-950 block">{prod.name}</span>
+                                <span className="text-[10px] text-gray-400 font-bold">{prod.category}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-center">
+                            {prod.stock <= 0 ? (
+                              <span className="bg-rose-100 text-rose-700 font-black px-2.5 py-1 rounded-full text-[10px] inline-flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                نفد (مخفي للزبون)
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-100 text-emerald-800 font-black px-2.5 py-1 rounded-full text-[10px]">
+                                متوفر: {prod.stock} {prod.unit}
+                              </span>
+                            )}
+                          </td>
+                          
+                          <td className="p-3.5 font-mono">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                value={quickEditOriginalPrice}
+                                onChange={(e) => setQuickEditOriginalPrice(e.target.value)}
+                                className="w-20 p-1 text-xs border border-gray-300 rounded-md font-bold font-mono"
+                              />
+                            ) : (
+                              <span className="text-gray-400 line-through font-bold">{prod.originalPrice || prod.sellingPrice} {settings.currencySymbol}</span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                value={quickEditOfferPrice}
+                                onChange={(e) => setQuickEditOfferPrice(e.target.value)}
+                                className="w-20 p-1 text-xs border border-gray-300 rounded-md font-bold font-mono"
+                              />
+                            ) : (
+                              <span className="text-rose-600 font-extrabold">{prod.sellingPrice} {settings.currencySymbol}</span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 text-center font-bold">
+                            <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md font-mono text-[10px] font-black">
+                              خصم {savings}%
+                            </span>
+                          </td>
+
+                          <td className="p-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      const orig = parseFloat(quickEditOriginalPrice);
+                                      const offer = parseFloat(quickEditOfferPrice);
+                                      if (isNaN(orig) || orig <= 0 || isNaN(offer) || offer <= 0) {
+                                        alert('الرجاء إدخال قيم صحيحة للأسعار!');
+                                        return;
+                                      }
+                                      const updated: Product = {
+                                        ...prod,
+                                        originalPrice: orig,
+                                        sellingPrice: offer
+                                      };
+                                      onUpdateProduct(updated);
+                                      setQuickEditOfferId(null);
+                                      alert('تم تعديل أسعار العرض بنجاح!');
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg cursor-pointer"
+                                  >
+                                    حفظ
+                                  </button>
+                                  <button
+                                    onClick={() => setQuickEditOfferId(null)}
+                                    className="px-2.5 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] font-bold rounded-lg cursor-pointer"
+                                  >
+                                    إلغاء
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setQuickEditOfferId(prod.id);
+                                      setQuickEditOriginalPrice((prod.originalPrice || prod.sellingPrice).toString());
+                                      setQuickEditOfferPrice(prod.sellingPrice.toString());
+                                    }}
+                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold rounded-lg text-[10px] cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    تعديل الأسعار
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`هل أنت متأكد من إلغاء العرض الترويجي عن المنتج "${prod.name}" وإعادته لوضعه العادي؟`)) {
+                                        const updated: Product = {
+                                          ...prod,
+                                          isOffer: false,
+                                          originalPrice: undefined
+                                        };
+                                        onUpdateProduct(updated);
+                                        alert('تم إلغاء العرض الترويجي بنجاح!');
+                                      }
+                                    }}
+                                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-lg text-[10px] cursor-pointer flex items-center gap-1"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    إلغاء العرض 🗑️
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL: ADD / EDIT PRODUCT */}
       {/* ========================================================================= */}
       {showProductModal && (
@@ -1636,6 +2047,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     onClose={() => setShowFormCameraScanner(false)}
                     onScanSuccess={(code) => setBarcode(code)}
                     title="مسح باركود الصنف بالكاميرا"
+                    products={products}
                   />
                 </div>
               ) : (
@@ -1859,6 +2271,62 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </div>
               </div>
 
+              {/* تفعيل التجزئة والتعبئة الفرعية */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="pl-3">
+                    <label className="block font-bold text-indigo-950 text-sm">تفعيل البيع بالتجزئة (شد كرتون / بيع بالحبة والقطع فردياً)</label>
+                    <p className="text-[10px] text-gray-500 font-medium">يتيح لك هذا الخيار بيع كرتون كامل أو كقطع فردية مجزأة بسعر وحساب تلقائي للمخزون.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={hasSubUnits}
+                    onChange={(e) => setHasSubUnits(e.target.checked)}
+                    className="w-5 h-5 accent-indigo-600 rounded cursor-pointer shrink-0"
+                  />
+                </div>
+
+                {hasSubUnits && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-200/60">
+                    <div>
+                      <label className="block font-bold text-gray-700 text-xs mb-1">العدد داخل الكرتون/الكيس *</label>
+                      <input
+                        type="number"
+                        min="2"
+                        required
+                        value={subUnitsPerUnit}
+                        onChange={(e) => setSubUnitsPerUnit(Math.max(2, Number(e.target.value)))}
+                        className="w-full p-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono font-bold text-xs"
+                        placeholder="مثال: 24"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 text-xs mb-1">اسم الوحدة الفرعية *</label>
+                      <input
+                        type="text"
+                        required
+                        value={subUnitName}
+                        onChange={(e) => setSubUnitName(e.target.value)}
+                        className="w-full p-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold text-xs"
+                        placeholder="مثال: حبة، كيس، قطعة"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 text-xs mb-1">سعر بيع الحبة (تلقائي/مخصص)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={subUnitSellingPrice || ''}
+                        onChange={(e) => setSubUnitSellingPrice(Number(e.target.value))}
+                        className="w-full p-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono font-extrabold text-xs text-emerald-700"
+                        placeholder={(sellingPrice / subUnitsPerUnit).toFixed(0)}
+                      />
+                      <p className="text-[9px] text-gray-400 mt-0.5">التلقائي المحسوب: {(sellingPrice / subUnitsPerUnit).toFixed(0)} {settings.currencySymbol}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block font-bold text-gray-700 mb-1">مكان وتوضيع الصنف بالمتجر (رف/مستودع)</label>
                 <input
@@ -1868,6 +2336,44 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              {/* Marketing and Online Store Settings */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-4">
+                <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-200/60">إعدادات العروض والخصومات</h4>
+
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-100">
+                  <div>
+                    <label className="block font-bold text-gray-800 text-xs">تفعيل كعرض ترويجي خاص</label>
+                    <p className="text-[10px] text-gray-400">سيتم إدراج هذا المنتج في قسم العروض الخاصة والخصومات.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isOffer}
+                    onChange={(e) => setIsOffer(e.target.checked)}
+                    className="w-5 h-5 accent-indigo-600 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {isOffer && (
+                  <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100/50 grid grid-cols-2 gap-3 items-center animate-fade-in">
+                    <div>
+                      <label className="block font-bold text-rose-950 text-xs mb-1">السعر الأصلي السابق قبل الخصم</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="مثال: 50.00"
+                        value={originalPrice || ''}
+                        onChange={(e) => setOriginalPrice(Number(e.target.value))}
+                        className="w-full p-2.5 bg-white border border-rose-200 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono font-bold text-rose-800"
+                      />
+                    </div>
+                    <div>
+                      <span className="block font-bold text-slate-500 text-[10px] mb-1">سعر العرض المخفض الحالي</span>
+                      <p className="font-mono font-black text-emerald-700 text-sm bg-white p-2.5 border border-slate-100 rounded-xl">{sellingPrice} {settings.currencySymbol}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               </div>

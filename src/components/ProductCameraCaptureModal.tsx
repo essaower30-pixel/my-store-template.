@@ -28,6 +28,7 @@ export const ProductCameraCaptureModal: React.FC<ProductCameraCaptureModalProps>
   useEffect(() => {
     if (isOpen) {
       setCapturedImage(null);
+      // Start camera immediately with standard 'environment' to trigger permission prompt instantly with zero delay!
       startCamera(null, 'environment');
     } else {
       stopCamera();
@@ -41,6 +42,13 @@ export const ProductCameraCaptureModal: React.FC<ProductCameraCaptureModalProps>
     stopCamera();
 
     if (!isOpenRef.current) return;
+
+    // Wait up to 15 attempts (750ms) for videoRef to be mounted in the DOM
+    let videoAttempts = 0;
+    while (!videoRef.current && videoAttempts < 15) {
+      videoAttempts++;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
 
     try {
       let mediaStream: MediaStream | null = null;
@@ -132,9 +140,19 @@ export const ProductCameraCaptureModal: React.FC<ProductCameraCaptureModalProps>
         const activeTrack = mediaStream.getVideoTracks()[0];
         if (activeTrack) {
           const settings = activeTrack.getSettings();
-          if (settings.deviceId) {
-            setSelectedDeviceId(settings.deviceId);
+          const currentDeviceId = settings.deviceId;
+          if (currentDeviceId) {
+            setSelectedDeviceId(currentDeviceId);
           }
+
+          // Auto-switch to the first physical camera (camera index 0) if it's different and we didn't request a custom targetDeviceId
+          if (videoInputs.length > 0 && !targetDeviceId && currentDeviceId && currentDeviceId !== videoInputs[0].deviceId) {
+            console.log('Auto-switching to physical camera index 0:', videoInputs[0].deviceId);
+            setSelectedDeviceId(videoInputs[0].deviceId);
+            startCamera(videoInputs[0].deviceId, 'environment');
+            return;
+          }
+
           if (settings.facingMode) {
             setFacingMode(settings.facingMode as 'environment' | 'user');
           } else {
@@ -212,10 +230,11 @@ export const ProductCameraCaptureModal: React.FC<ProductCameraCaptureModalProps>
     let nextDeviceId: string | null = null;
     const nextFacing: 'environment' | 'user' = facingMode === 'environment' ? 'user' : 'environment';
 
-    if (cameras.length > 1) {
-      const currentIdx = cameras.findIndex(c => c.deviceId === selectedDeviceId);
-      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % cameras.length : 1;
-      nextDeviceId = cameras[nextIdx].deviceId;
+    const validCams = (cameras || []).filter(c => c && c.deviceId);
+    if (validCams.length > 1) {
+      const currentIdx = validCams.findIndex(c => c.deviceId === selectedDeviceId);
+      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % validCams.length : 0;
+      nextDeviceId = validCams[nextIdx].deviceId;
       setSelectedDeviceId(nextDeviceId);
     }
 
@@ -305,11 +324,30 @@ export const ProductCameraCaptureModal: React.FC<ProductCameraCaptureModalProps>
                     onChange={(e) => handleSelectCameraDevice(e.target.value)}
                     className="flex-1 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 focus:outline-hidden"
                   >
-                    {cameras.map((cam, idx) => (
-                      <option key={cam.deviceId || idx} value={cam.deviceId}>
-                        {cam.label || `كاميرا ${idx + 1} (${cam.deviceId.slice(0, 6)}...)`}
-                      </option>
-                    ))}
+                    {(() => {
+                      const validDevices = (cameras || []).filter(c => c && c.deviceId);
+                      const mappedDevices = validDevices.map((cam, idx) => ({ cam, idx }));
+                      mappedDevices.sort((a, b) => {
+                        if (a.idx === 2) return -1;
+                        if (b.idx === 2) return 1;
+                        if (a.idx === 3) return -1;
+                        if (b.idx === 3) return 1;
+                        return a.idx - b.idx;
+                      });
+                      return mappedDevices.map(({ cam, idx }) => {
+                        let label = cam.label || `كاميرا رقم ${idx}`;
+                        if (idx === 0) label = `📷 الكاميرا الخلفية الافتراضية (رقم 0)`;
+                        else if (idx === 2) label = `📷 الكاميرا الخلفية الثانية (رقم 2)`;
+                        else if (idx === 1) label = `🤳 كاميرا رقم 1 (أمامية/أخرى)`;
+                        else if (idx === 3) label = `🤳 كاميرا رقم 3 (أمامية/أخرى)`;
+                        else label = `📷 كاميرا رقم ${idx}`;
+                        return (
+                          <option key={cam.deviceId || idx} value={cam.deviceId}>
+                            {label}
+                          </option>
+                        );
+                      });
+                    })()}
                   </select>
                 </div>
               )}

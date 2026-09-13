@@ -10,7 +10,8 @@ import {
   BookOpen,
   PieChart,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Smartphone
 } from 'lucide-react';
 import { User } from '../types/accounting';
 
@@ -25,15 +26,18 @@ export type TabType =
   | 'journal' 
   | 'reports' 
   | 'settings'
-  | 'users';
+  | 'users'
+  | 'orders';
 
 interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   lowStockCount: number;
   pendingReceivablesCount: number;
+  pendingOrdersCount?: number;
   onOpenDataSync?: () => void;
   onOpenAppIconCustomizer?: () => void;
+  onOpenPWA?: () => void;
   shopName?: string;
   logoUrl?: string;
   currentUser?: User | null;
@@ -44,12 +48,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   lowStockCount,
   pendingReceivablesCount,
+  pendingOrdersCount = 0,
   onOpenDataSync,
   onOpenAppIconCustomizer,
+  onOpenPWA,
   shopName,
   logoUrl,
   currentUser
 }) => {
+  const [isInstalled, setIsInstalled] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      setIsInstalled(isStandalone);
+    }
+  }, []);
+
   const menuItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
       id: 'dashboard',
@@ -142,6 +157,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="text-indigo-300 text-[10px] mt-0.5 truncate">نظام المحاسبة للمحلات الصغيرة</p>
         </div>
       </div>
+
+      {!isInstalled && onOpenPWA && (
+        <div className="mb-4 px-1 shrink-0">
+          <button
+            onClick={onOpenPWA}
+            className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-3 px-4 rounded-2xl transition-all flex items-center justify-center gap-2.5 text-xs cursor-pointer border border-emerald-400/30 shadow-md shadow-emerald-950/40 animate-pulse hover:animate-none"
+          >
+            <Smartphone className="w-4 h-4 text-emerald-100 shrink-0" />
+            <span className="truncate">تثبيت التطبيق على الجوال</span>
+          </button>
+        </div>
+      )}
 
       <nav className="space-y-1.5 flex-1 overflow-y-auto pr-1">
         {filteredMenuItems.map((item) => {

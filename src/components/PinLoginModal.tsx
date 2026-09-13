@@ -104,7 +104,7 @@ export const PinLoginModal: React.FC<PinLoginModalProps> = ({
           <div className="w-full space-y-4">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider text-right mb-2">اختر حساب المستخدم:</h3>
             <div className="grid grid-cols-1 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
-              {users.map((u) => {
+              {(users || []).map((u) => {
                 const isActive = currentUser?.id === u.id;
                 return (
                   <button

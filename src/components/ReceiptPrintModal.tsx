@@ -99,8 +99,8 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
                 <tr key={idx}>
                   <td className="py-1.5 font-semibold text-slate-800">{item.productName}</td>
                   <td className="py-1.5 text-center font-mono">{item.quantity}</td>
-                  <td className="py-1.5 text-left font-mono">{item.unitPrice.toFixed(2)}</td>
-                  <td className="py-1.5 text-left font-mono font-bold text-slate-900">{item.total.toFixed(2)}</td>
+                  <td className="py-1.5 text-left font-mono">{item.unitPrice.toFixed(0)}</td>
+                  <td className="py-1.5 text-left font-mono font-bold text-slate-900">{item.total.toFixed(0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -110,37 +110,37 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
           <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs font-mono">
             <div className="flex justify-between text-slate-600">
               <span>المجموع الفرعي:</span>
-              <span>{invoice.subtotal.toFixed(2)} {settings.currencySymbol}</span>
+              <span>{invoice.subtotal.toFixed(0)} {settings.currencySymbol}</span>
             </div>
 
             {invoice.discountTotal > 0 && (
               <div className="flex justify-between text-amber-700">
                 <span>الخصم:</span>
-                <span>-{invoice.discountTotal.toFixed(2)} {settings.currencySymbol}</span>
+                <span>-{invoice.discountTotal.toFixed(0)} {settings.currencySymbol}</span>
               </div>
             )}
 
             {invoice.taxAmount > 0 && (
               <div className="flex justify-between text-slate-600">
                 <span>ضريبة القيمة المضافة ({settings.defaultTaxRate}%):</span>
-                <span>{invoice.taxAmount.toFixed(2)} {settings.currencySymbol}</span>
+                <span>{invoice.taxAmount.toFixed(0)} {settings.currencySymbol}</span>
               </div>
             )}
 
             <div className="flex justify-between text-sm font-black text-slate-900 border-t border-slate-300 pt-1">
               <span>الصافي المطلوب:</span>
-              <span>{invoice.netTotal.toFixed(2)} {settings.currencySymbol}</span>
+              <span>{invoice.netTotal.toFixed(0)} {settings.currencySymbol}</span>
             </div>
 
             <div className="flex justify-between text-emerald-700 font-bold">
               <span>المبلغ المدفوع:</span>
-              <span>{invoice.paidAmount.toFixed(2)} {settings.currencySymbol}</span>
+              <span>{invoice.paidAmount.toFixed(0)} {settings.currencySymbol}</span>
             </div>
 
             {invoice.remainingAmount > 0 && (
               <div className="flex justify-between text-rose-700 font-bold">
                 <span>المتبقي (آجل):</span>
-                <span>{invoice.remainingAmount.toFixed(2)} {settings.currencySymbol}</span>
+                <span>{invoice.remainingAmount.toFixed(0)} {settings.currencySymbol}</span>
               </div>
             )}
           </div>

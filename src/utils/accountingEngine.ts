@@ -34,10 +34,41 @@ const STORAGE_KEYS = {
   SETTINGS: 'shop_acc_settings_v1',
 };
 
+// Helper to isolate localStorage partitions by store query parameter
+export function getStorePrefix(): string {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeId = urlParams.get('store');
+    if (storeId && storeId.trim() !== '') {
+      return `store_${storeId.trim()}_`;
+    }
+  }
+  return '';
+}
+
+export function getStoreQueryParam(): string {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    const storeId = urlParams.get('store');
+    if (storeId && storeId.trim() !== '') {
+      return storeId.trim();
+    }
+  }
+  return '';
+}
+
+export function getStoreUrl(url: string): string {
+  const storeId = getStoreQueryParam();
+  if (!storeId) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}store=${encodeURIComponent(storeId)}`;
+}
+
 // Helper for local storage retrieval with default fallback
 export function loadFromStorage<T>(key: string, defaultValue: T): T {
   try {
-    const item = localStorage.getItem(key);
+    const prefix = getStorePrefix();
+    const item = localStorage.getItem(prefix + key);
     return item ? JSON.parse(item) : defaultValue;
   } catch (error) {
     console.error(`Error loading key ${key} from storage`, error);
@@ -48,7 +79,8 @@ export function loadFromStorage<T>(key: string, defaultValue: T): T {
 // Helper for local storage saving
 export function saveToStorage<T>(key: string, value: T): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const prefix = getStorePrefix();
+    localStorage.setItem(prefix + key, JSON.stringify(value));
   } catch (error) {
     console.error(`Error saving key ${key} to storage`, error);
   }
