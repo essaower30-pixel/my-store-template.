@@ -50,71 +50,40 @@ HTMLMediaElement.prototype.play = function(...args: any[]) {
   return promise;
 };
 
-// Register Service Worker for offline PWA support in production, or clean up in dev environments
-const isDevEnvironment = typeof window !== 'undefined' && (
-  import.meta.env.DEV ||
-  window.location.hostname === 'localhost' || 
-  window.location.hostname.includes('127.0.0.1') ||
-  window.location.hostname.includes('ais-dev-')
-);
-
+// Register Service Worker for offline PWA support
 if ('serviceWorker' in navigator) {
-  if (isDevEnvironment) {
-    // Unregister any active service workers in dev/preview environments to prevent caching Vite internal modules
-    navigator.serviceWorker.getRegistrations().then(async (registrations) => {
-      let removedAny = false;
-      for (const registration of registrations) {
-        const ok = await registration.unregister();
-        if (ok) removedAny = true;
-      }
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        for (const key of keys) {
-          await caches.delete(key);
-          removedAny = true;
+  const registerSW = () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => {
+        console.log('ServiceWorker registered:', reg.scope);
+        reg.update().catch(err => console.warn('SW update check failed:', err));
+
+        // Proactively cache all currently loaded scripts, styles, and html for guaranteed offline startup
+        if ('caches' in window) {
+          caches.open('smart-trader-v25').then((cache) => {
+            // Cache root and current navigation URL
+            cache.add('/').catch(() => {});
+            cache.add('/index.html').catch(() => {});
+
+            // Cache script and css elements
+            const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => (s as HTMLScriptElement).src);
+            const links = Array.from(document.querySelectorAll('link[rel="stylesheet"], link[rel="icon"], link[rel="apple-touch-icon"]')).map(l => (l as HTMLLinkElement).href);
+            [...scripts, ...links].forEach((url) => {
+              if (url && (url.startsWith(window.location.origin) || url.startsWith('/'))) {
+                cache.add(url).catch(() => {});
+              }
+            });
+          }).catch(() => {});
         }
-      }
-      if (removedAny) {
-        console.log('Cleaned up dev service workers & caches to avoid React duplicate instance conflicts');
-      }
-    });
+      })
+      .catch(err => console.log('ServiceWorker registration failed:', err));
+  };
+
+  if (document.readyState === 'complete') {
+    registerSW();
   } else {
-    const registerSW = () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => {
-          console.log('ServiceWorker registered:', reg.scope);
-          reg.update().catch(err => console.warn('SW update check failed:', err));
-
-          // Proactively cache all currently loaded scripts, styles, and html for guaranteed offline startup
-          if ('caches' in window) {
-            caches.open('smart-trader-v23').then((cache) => {
-              // Cache current navigation URL
-              const currentUrl = window.location.href;
-              fetch(currentUrl, { cache: 'no-cache' }).then((res) => {
-                if (res.ok) cache.put(currentUrl, res);
-              }).catch(() => {});
-
-              // Cache script and css elements
-              const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => (s as HTMLScriptElement).src);
-              const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => (l as HTMLLinkElement).href);
-              [...scripts, ...links].forEach((url) => {
-                if (url && (url.startsWith(window.location.origin) || url.startsWith('/'))) {
-                  fetch(url).then((res) => {
-                    if (res.ok) cache.put(url, res);
-                  }).catch(() => {});
-                }
-              });
-            }).catch(() => {});
-          }
-        })
-        .catch(err => console.log('ServiceWorker registration failed:', err));
-    };
-
-    if (document.readyState === 'complete') {
-      registerSW();
-    } else {
-      window.addEventListener('load', registerSW);
-    }
+    window.addEventListener('load', registerSW);
+  }
 
     // Automatically reload when a new service worker replaces the old one
     let refreshing = false;
@@ -125,7 +94,6 @@ if ('serviceWorker' in navigator) {
         window.location.reload();
       }
     });
-  }
 }
 
 createRoot(document.getElementById('root')!).render(
