@@ -58,9 +58,17 @@ if ('serviceWorker' in navigator) {
         console.log('ServiceWorker registered:', reg.scope);
         reg.update().catch(err => console.warn('SW update check failed:', err));
 
-        // Proactively cache all currently loaded scripts, styles, and html for guaranteed offline startup
+        // Proactively clean up any older caches and cache latest files
         if ('caches' in window) {
-          caches.open('smart-trader-v25').then((cache) => {
+          caches.keys().then((keys) => {
+            keys.forEach((key) => {
+              if (key !== 'smart-trader-v26') {
+                caches.delete(key);
+              }
+            });
+          }).catch(() => {});
+
+          caches.open('smart-trader-v26').then((cache) => {
             // Cache root and current navigation URL
             cache.add('/').catch(() => {});
             cache.add('/index.html').catch(() => {});

@@ -17,7 +17,10 @@ import {
   Sparkles,
   ShieldCheck,
   Settings,
-  Lock
+  Lock,
+  Cloud,
+  CloudCheck,
+  CloudOff
 } from 'lucide-react';
 import { ShopSettings, Product, SalesInvoice, Customer, Supplier, PurchaseInvoice, User } from '../types/accounting';
 import { GlobalQuickSearchModal } from './GlobalQuickSearchModal';
@@ -253,25 +256,36 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Connection Status & PWA Install Button */}
+          {/* Connection Status & Firebase Cloud Indicator */}
           {syncStatus && (
-            <div 
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+            <button 
+              type="button"
+              onClick={onOpenDataSync}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
                 syncStatus === 'synced' 
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-800' 
+                  ? 'bg-sky-50 hover:bg-sky-100 border-sky-200 text-sky-900 shadow-xs' 
                   : syncStatus === 'syncing'
-                  ? 'bg-sky-50 border-sky-200 text-sky-800 animate-pulse'
+                  ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900 animate-pulse shadow-xs'
                   : syncStatus === 'error'
-                  ? 'bg-rose-50 border-rose-200 text-rose-800 animate-pulse'
-                  : 'bg-slate-50 border-slate-200 text-slate-800'
+                  ? 'bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-800 animate-pulse shadow-xs'
+                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800 shadow-xs'
               }`}
-              title="حالة المزامنة التلقائية اللحظية مع جميع أجهزة الكاشيرات الأخرى"
+              title="سحابة Google Firebase Firestore - انقر لفتح مركز المزامنة السحابية"
             >
+              {syncStatus === 'synced' ? (
+                <CloudCheck className="w-4 h-4 text-sky-600 shrink-0" />
+              ) : syncStatus === 'syncing' ? (
+                <Cloud className="w-4 h-4 text-amber-600 animate-bounce shrink-0" />
+              ) : syncStatus === 'error' ? (
+                <CloudOff className="w-4 h-4 text-rose-600 shrink-0" />
+              ) : (
+                <Cloud className="w-4 h-4 text-slate-500 shrink-0" />
+              )}
               <span className={`w-2 h-2 rounded-full ${
                 syncStatus === 'synced' 
-                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse' 
+                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] animate-pulse' 
                   : syncStatus === 'syncing'
-                  ? 'bg-sky-500'
+                  ? 'bg-amber-500'
                   : syncStatus === 'error'
                   ? 'bg-rose-500'
                   : 'bg-slate-400'
@@ -282,7 +296,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {syncStatus === 'error' && 'مشكلة بالمزامنة (مؤقت)'}
                 {syncStatus === 'idle' && 'سحابة Firebase جاهزة'}
               </span>
-            </div>
+            </button>
           )}
 
           <button 

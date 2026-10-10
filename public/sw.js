@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-trader-v23';
+const CACHE_NAME = 'smart-trader-v26';
 
 const PRECACHE_URLS = [
   '/',
