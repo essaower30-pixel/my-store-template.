@@ -62,13 +62,13 @@ if ('serviceWorker' in navigator) {
         if ('caches' in window) {
           caches.keys().then((keys) => {
             keys.forEach((key) => {
-              if (key !== 'smart-trader-v26') {
+              if (key !== 'smart-trader-v27') {
                 caches.delete(key);
               }
             });
           }).catch(() => {});
 
-          caches.open('smart-trader-v26').then((cache) => {
+          caches.open('smart-trader-v27').then((cache) => {
             // Cache root and current navigation URL
             cache.add('/').catch(() => {});
             cache.add('/index.html').catch(() => {});

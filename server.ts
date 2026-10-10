@@ -13,6 +13,7 @@ async function startServer() {
 
   // Increase payload limit for base64 product images
   app.use(express.json({ limit: "15mb" }));
+  app.use(express.static(path.join(process.cwd(), "public")));
 
   // Dynamic PWA Manifest Route
   app.get("/api/manifest.json", (req, res) => {
@@ -91,8 +92,9 @@ async function startServer() {
 
     res.json({
       id: startUrl,
-      short_name: finalTitle,
+      short_name: finalTitle.length > 12 ? 'التاجر الذكي' : finalTitle,
       name: finalTitle,
+      description: "برنامج محاسبة وإدارة البقالة والسوبرماركت المتكامل",
       icons: iconsList,
       start_url: startUrl,
       scope: "/",
@@ -945,7 +947,7 @@ ${productListFormatted}
     res.json(manifestData);
   });
 
-  // Prevent sw.js caching so updates are delivered instantly to PWA users
+  // Serve sw.js with proper headers so PWA installability criteria are satisfied
   app.get("/sw.js", (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
@@ -953,34 +955,15 @@ ${productListFormatted}
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Service-Worker-Allowed", "/");
     
-    const isProd = process.env.NODE_ENV === "production";
-    if (!isProd) {
-      // In development mode, return self-unregistering service worker that cleans up caches
-      // to prevent intercepting Vite ESM modules and causing duplicate React hook instances
-      return res.send(`
-        self.addEventListener('install', () => self.skipWaiting());
-        self.addEventListener('activate', (event) => {
-          event.waitUntil(
-            caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-              .then(() => self.registration.unregister())
-              .then(() => self.clients.claim())
-          );
-        });
-      `);
-    }
-
     const swPath = path.join(process.cwd(), "dist", "sw.js");
-      
     if (fs.existsSync(swPath)) {
-      res.sendFile(swPath);
-    } else {
-      const publicSw = path.join(process.cwd(), "public", "sw.js");
-      if (fs.existsSync(publicSw)) {
-        res.sendFile(publicSw);
-      } else {
-        res.status(404).send("Not found");
-      }
+      return res.sendFile(swPath);
     }
+    const publicSw = path.join(process.cwd(), "public", "sw.js");
+    if (fs.existsSync(publicSw)) {
+      return res.sendFile(publicSw);
+    }
+    return res.status(404).send("Not found");
   });
 
   // Vite middleware for development

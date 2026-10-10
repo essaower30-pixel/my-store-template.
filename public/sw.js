@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-trader-v26';
+const CACHE_NAME = 'smart-trader-v27';
 
 const PRECACHE_URLS = [
   '/',
@@ -7,7 +7,8 @@ const PRECACHE_URLS = [
   '/icon.jpg',
   '/icon.png',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-512.png',
+  '/apple-touch-icon.png'
 ];
 
 // Helper to match cached HTML regardless of query strings
